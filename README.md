@@ -12,6 +12,7 @@ progress, and emit a final research brief.
   boosts, tag/kind/scope filters, and token-overlap diversification.
 - Planning with explicit research steps and success criteria.
 - Dependency-aware plans that can be linear, tree-like, or graph-like.
+- Checkpointed long-running research runs that can be resumed one step at a time.
 - Reflection after each step to identify gaps and next actions.
 - A provider interface for plugging in real LLM/search/coding-agent backends.
 - A CLI that works out of the box with deterministic local providers.
@@ -48,6 +49,9 @@ auto-research improve --repo .
 auto-research memory remember "Prefer BM25 retrieval before embeddings" --scope procedural --tag retrieval
 auto-research memory search "BM25 retrieval" --scope procedural
 auto-research memory consolidate
+auto-research runs start "Research a large implementation" --max-steps 12
+auto-research runs step <run-id>
+auto-research runs status <run-id>
 ```
 
 `improve` writes `.auto_research/improvement_brief.md`, combining a repository
@@ -95,6 +99,33 @@ The default pipeline is intentionally small:
 5. Store observations in short- and long-term memory.
 6. Reflect on gaps, confidence, and next actions.
 7. Produce a final report.
+
+## Long-Running Runs
+
+One-shot `run` is useful for short tasks, but real coding-agent research often
+outlives one process. A long-running run stores checkpoints under
+`.auto_research/runs`:
+
+```bash
+auto-research runs start "Investigate and implement a durable agent workflow" --max-steps 12
+auto-research runs list
+auto-research runs step <run-id>
+auto-research runs status <run-id>
+```
+
+Each `step` executes one dependency-ready plan node, stores observations and
+reflection in memory, then saves the run state. If the process stops, the agent
+can load the same run id and continue.
+
+Current limitations:
+
+- Checkpoints are local JSON files, not a distributed job queue.
+- There is no scheduler or heartbeat loop yet; another process must call
+  `runs step`.
+- External waits, browser jobs, and human approvals are represented only as
+  waiting state, not first-class blocking events.
+- Budgets, deadlines, cancellation, and retry policies are not yet modeled.
+- Provider calls are synchronous; async providers will need a richer executor.
 
 ## Memory Design
 

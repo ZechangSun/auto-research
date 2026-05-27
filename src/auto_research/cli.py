@@ -10,6 +10,7 @@ from auto_research.consolidation import consolidate_memory
 from auto_research.improvement import improve_repository
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope
 from auto_research.pipeline import ResearchPipeline
+from auto_research.run_state import RunStatus, RunStore
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,12 +61,37 @@ def build_parser() -> argparse.ArgumentParser:
     consolidate.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     consolidate.add_argument("--recent-limit", type=int, default=50)
     consolidate.add_argument("--json", action="store_true")
+
+    runs = subcommands.add_parser("runs", help="Start, resume, and inspect long-running research.")
+    run_subcommands = runs.add_subparsers(dest="runs_command", required=True)
+
+    start = run_subcommands.add_parser("start", help="Create a checkpointed research run.")
+    start.add_argument("task", help="Research task or coding-agent prompt.")
+    start.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    start.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    start.add_argument("--max-steps", type=int, default=5)
+    start.add_argument("--session-id", default=None)
+
+    step = run_subcommands.add_parser("step", help="Advance a checkpointed run by one step.")
+    step.add_argument("run_id", help="Run id to resume.")
+    step.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    step.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    step.add_argument("--json", action="store_true")
+
+    status = run_subcommands.add_parser("status", help="Show a checkpointed run.")
+    status.add_argument("run_id", help="Run id to inspect.")
+    status.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    status.add_argument("--json", action="store_true")
+
+    list_runs = run_subcommands.add_parser("list", help="List checkpointed runs.")
+    list_runs.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    list_runs.add_argument("--json", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in {"run", "improve", "memory", "-h", "--help"}:
+    if argv and argv[0] not in {"run", "improve", "memory", "runs", "-h", "--help"}:
         argv.insert(0, "run")
 
     args = build_parser().parse_args(argv)
@@ -87,6 +113,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "memory":
         return _memory_command(args)
 
+    if args.command == "runs":
+        return _runs_command(args)
+
     memory = LongTermMemory(Path(args.db))
     try:
         report = ResearchPipeline(memory).run(
@@ -101,6 +130,62 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         memory.close()
     return 0
+
+
+def _runs_command(args: argparse.Namespace) -> int:
+    store = RunStore(args.state_dir)
+    if args.runs_command == "start":
+        memory = LongTermMemory(Path(args.db))
+        try:
+            state = ResearchPipeline(memory).start(
+                args.task,
+                max_steps=args.max_steps,
+                session_id=args.session_id,
+            )
+            store.save(state)
+            print(f"Started {state.run_id} status={state.status.value}")
+        finally:
+            memory.close()
+        return 0
+
+    if args.runs_command == "step":
+        state = store.load(args.run_id)
+        if state.status is RunStatus.WAITING:
+            state.status = RunStatus.ACTIVE
+        memory = LongTermMemory(Path(args.db))
+        try:
+            state = ResearchPipeline(memory).step(state)
+            store.save(state)
+            if args.json:
+                print(json.dumps(state.to_dict(), indent=2, default=str))
+            else:
+                report = ResearchPipeline(memory).report_from_state(state)
+                print(f"Run {state.run_id} status={state.status.value} steps={state.steps_executed}/{state.max_steps}")
+                print(report.to_markdown())
+        finally:
+            memory.close()
+        return 0
+
+    if args.runs_command == "status":
+        state = store.load(args.run_id)
+        if args.json:
+            print(json.dumps(state.to_dict(), indent=2, default=str))
+        else:
+            print(f"Run {state.run_id} status={state.status.value} steps={state.steps_executed}/{state.max_steps}")
+            print(f"Task: {state.task}")
+            for step in state.plan.steps:
+                print(f"- [{step.status.value}] {step.id}: {step.goal}")
+        return 0
+
+    if args.runs_command == "list":
+        states = store.list()
+        if args.json:
+            print(json.dumps([state.to_dict() for state in states], indent=2, default=str))
+        else:
+            for state in states:
+                print(f"{state.run_id} {state.status.value} steps={state.steps_executed}/{state.max_steps} {state.task}")
+        return 0
+    return 1
 
 
 def _memory_command(args: argparse.Namespace) -> int:

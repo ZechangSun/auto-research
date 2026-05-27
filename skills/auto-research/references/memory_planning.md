@@ -84,3 +84,30 @@ Before claiming completion, verify:
 - Tests or validation commands ran, or missing validation is explicit.
 - Retrieved memories are relevant enough to justify their context cost.
 - New lessons were saved as reflective or procedural memory when reusable.
+
+## Long-Running Research
+
+A long-running research loop needs state outside the model context:
+
+- Run id and task.
+- Current plan graph.
+- Step statuses and observations.
+- Last reflection and confidence.
+- Memory checkpoint boundaries.
+- Status: active, waiting, complete, or failed.
+- Error, retry, and wakeup metadata.
+
+Use checkpointed stepping when:
+
+- The task spans multiple agent turns.
+- A provider call may be slow or flaky.
+- The agent needs to wait for browser actions, external tools, or human input.
+- The plan should be reviewed between steps.
+
+Future design targets:
+
+- Scheduler/heartbeat integration.
+- Explicit wait events for human/tool/browser dependencies.
+- Budget and deadline policies.
+- Retry/backoff policies per provider.
+- Compaction from raw run trace into durable memory.

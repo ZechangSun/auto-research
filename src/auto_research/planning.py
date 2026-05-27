@@ -74,6 +74,57 @@ class Plan:
     def is_complete(self) -> bool:
         return all(step.status in {StepStatus.COMPLETE, StepStatus.SKIPPED} for step in self.steps)
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "task": self.task,
+            "shape": self.shape.value,
+            "steps": [
+                {
+                    "id": step.id,
+                    "goal": step.goal,
+                    "method": step.method,
+                    "success_criteria": step.success_criteria,
+                    "parent_id": step.parent_id,
+                    "status": step.status.value,
+                    "observation": step.observation,
+                }
+                for step in self.steps
+            ],
+            "edges": [
+                {"source": edge.source, "target": edge.target, "relation": edge.relation}
+                for edge in self.edges
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "Plan":
+        steps = [
+            PlanStep(
+                id=str(step["id"]),
+                goal=str(step["goal"]),
+                method=str(step["method"]),
+                success_criteria=str(step["success_criteria"]),
+                parent_id=step["parent_id"] if step.get("parent_id") else None,
+                status=StepStatus(str(step.get("status", StepStatus.PENDING.value))),
+                observation=step["observation"] if step.get("observation") else None,
+            )
+            for step in data.get("steps", [])
+        ]
+        edges = [
+            PlanEdge(
+                source=str(edge["source"]),
+                target=str(edge["target"]),
+                relation=str(edge.get("relation", "depends_on")),
+            )
+            for edge in data.get("edges", [])
+        ]
+        return cls(
+            task=str(data["task"]),
+            steps=steps,
+            shape=PlanShape(str(data.get("shape", PlanShape.GRAPH.value))),
+            edges=edges,
+        )
+
 
 @dataclass(frozen=True)
 class PlanIssue:
@@ -137,6 +188,7 @@ def choose_plan_shape(task: str) -> PlanShape:
     if any(
         marker in lowered
         for marker in ["compare", "explore", "research", "investigate", "graph", "memory", "planning"]
+        + ["reflect", "reflection", "long-running", "long running", "checkpoint", "resume"]
     ):
         return PlanShape.GRAPH
     if any(marker in lowered for marker in ["break down", "decompose", "build", "implement"]):

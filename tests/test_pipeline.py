@@ -2,6 +2,7 @@ from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, Memo
 from auto_research.pipeline import ResearchPipeline
 from auto_research.planning import Plan, PlanEdge, PlanShape, PlanStep, lint_plan
 from auto_research.consolidation import consolidate_memory
+from auto_research.run_state import RunStatus, RunStore
 
 
 def test_pipeline_produces_report(tmp_path):
@@ -107,3 +108,24 @@ def test_plan_lint_detects_cycles():
     issues = lint_plan(plan)
 
     assert any(issue.severity == "error" and "cycle" in issue.message for issue in issues)
+
+
+def test_run_state_can_checkpoint_and_resume(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    store = RunStore(tmp_path / "runs")
+    try:
+        pipeline = ResearchPipeline(memory)
+        state = pipeline.start("Long running research about memory planning", max_steps=4)
+        state = pipeline.step(state)
+        store.save(state)
+
+        restored = store.load(state.run_id)
+        assert restored.steps_executed == 1
+
+        resumed = pipeline.step(restored)
+        store.save(resumed)
+    finally:
+        memory.close()
+
+    assert resumed.steps_executed == 2
+    assert resumed.status in {RunStatus.ACTIVE, RunStatus.WAITING, RunStatus.COMPLETE}

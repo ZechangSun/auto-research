@@ -16,12 +16,39 @@ designing complex agent behavior.
 1. Start with repository context.
    - For repo improvement: `auto-research improve --repo . --max-steps 5`
    - For a specific task: `auto-research run "<task>" --max-steps 5`
+   - For long-running work: `auto-research runs start "<task>" --max-steps 12`
 2. Read the generated report or `.auto_research/improvement_brief.md`.
 3. Convert the highest-value recommendation into a small implementation plan.
 4. Implement the change with normal coding-agent tools.
 5. Run relevant tests.
 6. Consolidate reusable lessons: `auto-research memory consolidate`.
 7. Run the pipeline again when the task is substantial or the results changed the direction.
+
+## Long-Running Work
+
+Use checkpointed runs when the task may exceed one turn, wait on tools, or need
+periodic reflection:
+
+```bash
+auto-research runs start "Research and implement the feature" --max-steps 12
+auto-research runs step <run-id>
+auto-research runs status <run-id>
+auto-research runs list
+```
+
+Run one `step` per wakeup or work interval. After each step, inspect status:
+
+- `active`: continue stepping.
+- `waiting`: needs another wakeup, higher max step budget, or external input.
+- `complete`: produce final summary and consolidate memory.
+- `failed`: inspect `last_error`, fix the provider/tool issue, then resume.
+
+Long-running limitations to remember:
+
+- Current checkpoints are local JSON files.
+- There is no built-in scheduler yet.
+- Human approvals and external tool waits are not first-class events yet.
+- Budget, deadline, cancellation, and retry policies still need design.
 
 ## Memory
 

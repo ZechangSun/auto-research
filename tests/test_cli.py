@@ -61,3 +61,34 @@ def test_cli_memory_search_and_consolidate(tmp_path, capsys):
     assert consolidate_code == 0
     assert "bm25" in output.lower()
     assert "Memory Consolidation" in output
+
+
+def test_cli_runs_start_step_status(tmp_path, capsys):
+    db = tmp_path / "memory.sqlite"
+    state_dir = tmp_path / "runs"
+
+    start_code = main(
+        [
+            "runs",
+            "start",
+            "Long running research task",
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--max-steps",
+            "2",
+        ]
+    )
+    output = capsys.readouterr().out
+    run_id = output.split()[1]
+
+    step_code = main(["runs", "step", run_id, "--db", str(db), "--state-dir", str(state_dir)])
+    status_code = main(["runs", "status", run_id, "--state-dir", str(state_dir)])
+
+    output = capsys.readouterr().out
+    assert start_code == 0
+    assert step_code == 0
+    assert status_code == 0
+    assert "status=" in output
+    assert "Long running research task" in output

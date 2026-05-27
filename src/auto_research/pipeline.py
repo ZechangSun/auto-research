@@ -13,6 +13,7 @@ from auto_research.providers import (
     ResearchProvider,
 )
 from auto_research.reflection import Reflection
+from auto_research.run_state import ResearchRunState, RunStatus
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,17 @@ class ResearchPipeline:
         self.reflector = reflector or HeuristicReflectionProvider()
 
     def run(self, task: str, max_steps: int = 5, session_id: str | None = None) -> ResearchReport:
+        state = self.start(task, max_steps=max_steps, session_id=session_id)
+        while state.status is RunStatus.ACTIVE:
+            state = self.step(state)
+        return self.report_from_state(state)
+
+    def start(
+        self,
+        task: str,
+        max_steps: int = 5,
+        session_id: str | None = None,
+    ) -> ResearchRunState:
         memories = self._retrieve_starting_memories(task)
         for memory in memories:
             self.short_term_memory.focus(memory)
@@ -87,60 +99,103 @@ class ResearchPipeline:
             )
             self.short_term_memory.add(issue_record)
             self.long_term_memory.add(issue_record)
-        steps_executed = 0
-        while steps_executed < max_steps and not plan.is_complete():
-            ready_steps = plan.ready_steps() or plan.pending_steps()
-            if not ready_steps:
-                break
-            step = ready_steps[0]
-            if steps_executed >= max_steps:
-                break
+        return ResearchRunState(
+            task=task,
+            plan=plan,
+            session_id=session_id,
+            max_steps=max_steps,
+            status=RunStatus.COMPLETE if plan.is_complete() else RunStatus.ACTIVE,
+        )
+
+    def step(self, state: ResearchRunState) -> ResearchRunState:
+        if state.status is not RunStatus.ACTIVE:
+            return state
+        if state.steps_executed >= state.max_steps:
+            state.status = RunStatus.WAITING
+            return state
+        if state.plan.is_complete():
+            state.status = RunStatus.COMPLETE
+            return state
+
+        ready_steps = state.plan.ready_steps() or state.plan.pending_steps()
+        if not ready_steps:
+            state.status = RunStatus.WAITING
+            return state
+
+        step = ready_steps[0]
+        try:
             step.status = StepStatus.RUNNING
-            observation = self.researcher.research(task, step, self.short_term_memory.recent(12))
-            step.observation = observation
-            step.status = StepStatus.COMPLETE
-            record = MemoryRecord(
-                kind="observation",
-                content=observation,
-                scope=MemoryScope.EPISODIC,
-                importance=0.65 if step.id in {"strategy", "synthesis"} else 0.55,
-                tags=("research", step.id),
-                metadata={"task": task, "step_id": step.id, "session_id": session_id},
+            observation = self.researcher.research(
+                state.task,
+                step,
+                self.short_term_memory.recent(12),
             )
-            self.short_term_memory.add(record)
-            self.long_term_memory.add(record)
-            steps_executed += 1
+        except Exception as exc:
+            step.status = StepStatus.PENDING
+            state.status = RunStatus.FAILED
+            state.last_error = str(exc)
+            return state
 
-            reflection = self.reflector.reflect(task, plan, self.short_term_memory.recent(20))
-            reflection_record = MemoryRecord(
-                kind="reflection",
-                content=reflection.summary,
-                scope=MemoryScope.REFLECTIVE,
-                importance=0.7,
-                confidence=reflection.confidence,
-                tags=("reflection",),
-                metadata={
-                    "task": task,
-                    "confidence": reflection.confidence,
-                    "gaps": reflection.gaps,
-                    "session_id": session_id,
-                },
-            )
-            self.short_term_memory.add(reflection_record)
-            self.long_term_memory.add(reflection_record)
+        step.observation = observation
+        step.status = StepStatus.COMPLETE
+        record = MemoryRecord(
+            kind="observation",
+            content=observation,
+            scope=MemoryScope.EPISODIC,
+            importance=0.65 if step.id in {"strategy", "synthesis"} else 0.55,
+            tags=("research", step.id),
+            metadata={"task": state.task, "step_id": step.id, "session_id": state.session_id},
+        )
+        self.short_term_memory.add(record)
+        self.long_term_memory.add(record)
+        state.steps_executed += 1
 
-            if not reflection.needs_more_work and plan.is_complete():
-                break
+        reflection = self.reflector.reflect(state.task, state.plan, self.short_term_memory.recent(20))
+        reflection_record = MemoryRecord(
+            kind="reflection",
+            content=reflection.summary,
+            scope=MemoryScope.REFLECTIVE,
+            importance=0.7,
+            confidence=reflection.confidence,
+            tags=("reflection",),
+            metadata={
+                "task": state.task,
+                "confidence": reflection.confidence,
+                "gaps": reflection.gaps,
+                "session_id": state.session_id,
+            },
+        )
+        self.short_term_memory.add(reflection_record)
+        self.long_term_memory.add(reflection_record)
 
-        final_reflection = self.reflector.reflect(task, plan, self.short_term_memory.recent(20))
+        if state.plan.is_complete() and not reflection.needs_more_work:
+            state.status = RunStatus.COMPLETE
+        elif state.steps_executed >= state.max_steps:
+            state.status = RunStatus.WAITING
+        return state
+
+    def report_from_state(self, state: ResearchRunState) -> ResearchReport:
+        final_reflection = self.reflector.reflect(state.task, state.plan, self.short_term_memory.recent(20))
         observations = [
             record
             for record in self.short_term_memory.all()
-            if record.kind == "observation" and record.metadata.get("task") == task
+            if record.kind == "observation" and record.metadata.get("task") == state.task
         ]
+        if not observations:
+            observations = [
+                MemoryRecord(
+                    kind="observation",
+                    content=step.observation,
+                    scope=MemoryScope.EPISODIC,
+                    tags=("research", step.id),
+                    metadata={"task": state.task, "step_id": step.id, "session_id": state.session_id},
+                )
+                for step in state.plan.steps
+                if step.observation
+            ]
         return ResearchReport(
-            task=task,
-            plan=plan,
+            task=state.task,
+            plan=state.plan,
             reflection=final_reflection,
             observations=observations,
         )
