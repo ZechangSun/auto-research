@@ -28,7 +28,7 @@ def test_cli_improve_writes_brief(tmp_path):
             "--output",
             str(output),
             "--max-steps",
-            "1",
+            "2",
         ]
     )
 

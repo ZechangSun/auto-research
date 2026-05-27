@@ -8,7 +8,10 @@ progress, and emit a final research brief.
 
 - Short-term memory for the current run.
 - Long-term memory persisted in SQLite.
+- Classical retrieval with BM25-style lexical scoring, recency and importance
+  boosts, tag/kind/scope filters, and token-overlap diversification.
 - Planning with explicit research steps and success criteria.
+- Dependency-aware plans that can be linear, tree-like, or graph-like.
 - Reflection after each step to identify gaps and next actions.
 - A provider interface for plugging in real LLM/search/coding-agent backends.
 - A CLI that works out of the box with deterministic local providers.
@@ -62,6 +65,9 @@ auto-research run "Research how to implement the current coding task"
 The skill keeps local long-term memory under `.auto_research/memory.sqlite`,
 which is intentionally ignored by git.
 
+For deeper agent guidance, see
+`skills/auto-research/references/memory_planning.md`.
+
 ## Architecture
 
 ```mermaid
@@ -81,10 +87,36 @@ The default pipeline is intentionally small:
 
 1. Load relevant long-term memories.
 2. Create an initial plan.
-3. Execute each research step through a provider.
-4. Store observations in short- and long-term memory.
-5. Reflect on gaps, confidence, and next actions.
-6. Produce a final report.
+3. Retrieve relevant scoped memories without embeddings.
+4. Execute dependency-ready research steps through a provider.
+5. Store observations in short- and long-term memory.
+6. Reflect on gaps, confidence, and next actions.
+7. Produce a final report.
+
+## Memory Design
+
+Memory is organized by scope:
+
+- `working`: active facts for the current reasoning window.
+- `episodic`: observations from prior runs.
+- `semantic`: durable facts and project knowledge.
+- `procedural`: reusable methods, policies, and workflows.
+- `reflective`: lessons, risks, and post-run conclusions.
+
+Retrieval intentionally avoids embeddings. The default retriever combines:
+
+- BM25-style lexical ranking for exact and near-exact term evidence.
+- Scope, kind, and tag filters for precision.
+- Importance and recency boosts for salience.
+- Token-overlap diversification so one repeated memory does not crowd out the
+  rest of the context.
+
+## Planning Design
+
+Small known tasks can use a linear plan. Build tasks generally use a tree-like
+decomposition. Research and architecture tasks use a graph-like plan, because
+evidence gathering, strategy selection, synthesis, validation, and reflection
+often depend on each other without being a single straight line.
 
 ## Extending
 

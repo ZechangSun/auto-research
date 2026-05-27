@@ -7,6 +7,10 @@ description: Use this skill when a coding agent needs to research, plan, impleme
 
 Use this skill to add a research loop around coding-agent work.
 
+For detailed memory/retrieval/planning design, read
+`references/memory_planning.md` when the task is about improving this pipeline or
+designing complex agent behavior.
+
 ## Core Workflow
 
 1. Start with repository context.
@@ -21,12 +25,38 @@ Use this skill to add a research loop around coding-agent work.
 ## Memory
 
 - Long-term memory is stored in `.auto_research/memory.sqlite`.
-- Short-term memory lives in the current pipeline run.
+- Short-term memory lives in the current pipeline run and should keep focused records separate from the full trace.
 - Do not commit `.auto_research/`; it is local agent memory.
 - Use `--session-id` to group related work across multiple runs.
+- Prefer scoped memory:
+  - `working` for active task facts.
+  - `episodic` for run observations.
+  - `semantic` for durable project facts.
+  - `procedural` for reusable methods.
+  - `reflective` for lessons and risks.
+
+## Retrieval
+
+Use classical retrieval before reaching for model context:
+
+- BM25-style lexical search for relevance.
+- Scope, kind, and tag filters for precision.
+- Importance and recency boosts for salience.
+- Token-overlap diversification to avoid duplicate memories.
+- No embeddings are required by default.
+
+## Planning
+
+- Use a linear plan only for small, familiar tasks.
+- Use a tree plan for implementation work that decomposes into subfeatures.
+- Use a graph plan for research, architecture, comparison, or uncertain tasks.
+- Execute dependency-ready nodes first.
+- Reflect after each meaningful node and update the plan when new evidence changes the route.
 
 ## Decision Rules
 
+- Understand the task before planning; write down assumptions when the request is ambiguous.
+- Create or refine a brief spec for nontrivial work.
 - Prefer the smallest change that improves future agent usefulness.
 - Keep orchestration separate from provider implementations.
 - Add provider protocols before binding the pipeline to one search, model, browser, or coding-agent backend.

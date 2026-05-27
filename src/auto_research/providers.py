@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from auto_research.memory import MemoryRecord
-from auto_research.planning import Plan, PlanStep
+from auto_research.planning import Plan, PlanStep, choose_plan_shape
 from auto_research.reflection import Reflection
 
 
@@ -25,7 +25,7 @@ class ReflectionProvider(Protocol):
 class HeuristicPlanningProvider:
     def create_plan(self, task: str, memories: list[MemoryRecord]) -> Plan:
         memory_hint = "Use prior memory where relevant." if memories else "Establish baseline context."
-        return Plan(
+        plan = Plan(
             task=task,
             steps=[
                 PlanStep(
@@ -39,15 +39,30 @@ class HeuristicPlanningProvider:
                     goal="Gather supporting evidence and implementation options.",
                     method="Review available context, existing memories, and local/repository signals.",
                     success_criteria="Key options, tradeoffs, and risks are documented.",
+                    parent_id="scope",
+                ),
+                PlanStep(
+                    id="strategy",
+                    goal="Choose a planning strategy and memory retrieval mode.",
+                    method="Decide whether the task needs a tree, graph, or linear plan and which memory scopes to retrieve.",
+                    success_criteria="The execution shape and retrieval approach are explicit.",
+                    parent_id="scope",
                 ),
                 PlanStep(
                     id="synthesis",
                     goal="Synthesize a recommended path.",
                     method="Convert observations into a concrete implementation or research brief.",
                     success_criteria="The final answer is actionable and cites the evidence used.",
+                    parent_id="strategy",
                 ),
             ],
+            shape=choose_plan_shape(task),
         )
+        plan.add_dependency("scope", "evidence")
+        plan.add_dependency("scope", "strategy")
+        plan.add_dependency("evidence", "synthesis")
+        plan.add_dependency("strategy", "synthesis")
+        return plan
 
 
 class HeuristicResearchProvider:
@@ -64,6 +79,14 @@ class HeuristicResearchProvider:
                 "explicit plan steps, iterative reflection, provider interfaces, "
                 "observability, and risk tracking for stale evidence, weak sources, "
                 f"or incomplete execution. Recent context: {prior or 'none'}"
+            )
+        if step.id == "strategy":
+            return (
+                "Use scoped classical retrieval: BM25 for lexical relevance, recency and "
+                "importance boosts for salience, tag/kind/scope filters for precision, "
+                "and token-overlap diversification to avoid repeated memories. Use graph "
+                "plans for research, tree plans for implementation decomposition, and "
+                "linear plans for small known tasks."
             )
         return (
             "Recommended path: keep orchestration separate from providers so search, "
