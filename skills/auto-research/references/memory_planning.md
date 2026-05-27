@@ -21,6 +21,14 @@ Long-term memory should preserve durable records with:
 - Tags: project, feature, topic, source, and task markers.
 - Access metadata: last access time and access count.
 
+Promotion rules:
+
+- Episodic observations stay raw until they prove reusable.
+- Procedural memory stores repeatable workflows and commands.
+- Semantic memory stores stable project facts and design decisions.
+- Reflective memory stores lessons, risks, and mistakes.
+- Consolidation should prefer precision over volume.
+
 ## Classical Retrieval
 
 Default retrieval should avoid embeddings and combine:
@@ -37,6 +45,8 @@ Recommended retrieval modes:
 - During execution: focused short-term memory + recent episodic observations.
 - Before reflection: observations + validation records + prior reflective lessons.
 - Before implementation: procedural memories + similar decisions + known risks.
+- After implementation: consolidate useful observations into procedural,
+  semantic, or reflective memory.
 
 ## Planning Shapes
 
@@ -57,6 +67,13 @@ Use a graph plan when researching or designing:
 Graph plans work better for uncertain tasks because evidence can change the next
 useful node. Tree plans work better once the architecture is settled and work can
 be decomposed into implementation leaves.
+
+Plan lint checks:
+
+- Every step has a stable id, goal, method, and success criteria.
+- Every dependency edge references real nodes.
+- Dependency graphs must be acyclic for execution.
+- Graph plans should have explicit edges.
 
 ## Reflection Gates
 

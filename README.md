@@ -45,6 +45,9 @@ You can also use explicit subcommands:
 ```bash
 auto-research run "Research prompt"
 auto-research improve --repo .
+auto-research memory remember "Prefer BM25 retrieval before embeddings" --scope procedural --tag retrieval
+auto-research memory search "BM25 retrieval" --scope procedural
+auto-research memory consolidate
 ```
 
 `improve` writes `.auto_research/improvement_brief.md`, combining a repository
@@ -111,12 +114,21 @@ Retrieval intentionally avoids embeddings. The default retriever combines:
 - Token-overlap diversification so one repeated memory does not crowd out the
   rest of the context.
 
+Reusable memories can be promoted with `auto-research memory consolidate`.
+Consolidation scans recent episodic and reflective records, then promotes useful
+patterns into semantic, procedural, or reflective memory. This keeps raw run
+history separate from durable knowledge.
+
 ## Planning Design
 
 Small known tasks can use a linear plan. Build tasks generally use a tree-like
 decomposition. Research and architecture tasks use a graph-like plan, because
 evidence gathering, strategy selection, synthesis, validation, and reflection
 often depend on each other without being a single straight line.
+
+Plans are linted for missing goals, missing success criteria, bad edges, and
+dependency cycles. Lint findings are stored as reflective memory so future runs
+can learn from planning mistakes.
 
 ## Extending
 

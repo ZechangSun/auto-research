@@ -141,6 +141,17 @@ class LongTermMemory:
         )
         self._connection.commit()
 
+    def get(self, record_id: str) -> MemoryRecord | None:
+        row = self._connection.execute("select * from memories where id = ?", (record_id,)).fetchone()
+        return MemoryRecord.from_row(row) if row else None
+
+    def recent(self, limit: int = 20) -> list[MemoryRecord]:
+        rows = self._connection.execute(
+            "select * from memories order by created_at desc limit ?",
+            (limit,),
+        ).fetchall()
+        return [MemoryRecord.from_row(row) for row in rows]
+
     def search(self, query: str, limit: int = 8) -> list[MemoryRecord]:
         return [result.record for result in self.retrieve(MemoryQuery(text=query, limit=limit))]
 
@@ -150,6 +161,32 @@ class LongTermMemory:
         results = score_memories(query, records)
         self._mark_accessed([result.record.id for result in results])
         return results
+
+    def promote(
+        self,
+        record_id: str,
+        scope: MemoryScope,
+        kind: str | None = None,
+        importance: float | None = None,
+        confidence: float | None = None,
+        tags: tuple[str, ...] | None = None,
+    ) -> MemoryRecord | None:
+        record = self.get(record_id)
+        if record is None:
+            return None
+        promoted = MemoryRecord(
+            id=record.id,
+            kind=kind or record.kind,
+            content=record.content,
+            scope=scope,
+            importance=importance if importance is not None else max(record.importance, 0.75),
+            confidence=confidence if confidence is not None else record.confidence,
+            tags=tags if tags is not None else record.tags,
+            metadata={**record.metadata, "promoted_from_scope": record.scope.value},
+            created_at=record.created_at,
+        )
+        self.add(promoted)
+        return promoted
 
     def _candidate_rows(self, query: MemoryQuery) -> list[sqlite3.Row]:
         clauses: list[str] = []
@@ -310,3 +347,18 @@ def _jaccard(left: MemoryRecord, right: MemoryRecord) -> float:
     if not left_terms or not right_terms:
         return 0.0
     return len(left_terms.intersection(right_terms)) / len(left_terms.union(right_terms))
+
+
+def summarize_records(records: list[MemoryRecord], max_items: int = 8) -> str:
+    selected = records[:max_items]
+    if not selected:
+        return "No memory records available."
+    lines = []
+    for record in selected:
+        tags = f" tags={','.join(record.tags)}" if record.tags else ""
+        lines.append(
+            f"- {record.id[:8]} [{record.scope.value}/{record.kind}] "
+            f"importance={record.importance:.2f} confidence={record.confidence:.2f}{tags}: "
+            f"{record.content}"
+        )
+    return "\n".join(lines)

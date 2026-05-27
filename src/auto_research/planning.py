@@ -75,6 +75,63 @@ class Plan:
         return all(step.status in {StepStatus.COMPLETE, StepStatus.SKIPPED} for step in self.steps)
 
 
+@dataclass(frozen=True)
+class PlanIssue:
+    severity: str
+    message: str
+    step_id: str | None = None
+
+
+def lint_plan(plan: Plan) -> list[PlanIssue]:
+    issues: list[PlanIssue] = []
+    step_ids = {step.id for step in plan.steps}
+    if not plan.steps:
+        return [PlanIssue("error", "Plan has no steps.")]
+    if len(step_ids) != len(plan.steps):
+        issues.append(PlanIssue("error", "Plan contains duplicate step ids."))
+    for step in plan.steps:
+        if not step.goal.strip():
+            issues.append(PlanIssue("error", "Step has no goal.", step.id))
+        if not step.success_criteria.strip():
+            issues.append(PlanIssue("warning", "Step has no success criteria.", step.id))
+    for edge in plan.edges:
+        if edge.source not in step_ids:
+            issues.append(PlanIssue("error", f"Dependency source does not exist: {edge.source}", edge.target))
+        if edge.target not in step_ids:
+            issues.append(PlanIssue("error", f"Dependency target does not exist: {edge.target}", edge.source))
+    issues.extend(_cycle_issues(plan))
+    if plan.shape is PlanShape.GRAPH and not plan.edges:
+        issues.append(PlanIssue("warning", "Graph plan has no edges."))
+    return issues
+
+
+def _cycle_issues(plan: Plan) -> list[PlanIssue]:
+    dependencies: dict[str, list[str]] = {step.id: [] for step in plan.steps}
+    for edge in plan.edges:
+        if edge.relation == "depends_on":
+            dependencies.setdefault(edge.target, []).append(edge.source)
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(step_id: str) -> bool:
+        if step_id in visiting:
+            return True
+        if step_id in visited:
+            return False
+        visiting.add(step_id)
+        for dependency in dependencies.get(step_id, []):
+            if visit(dependency):
+                return True
+        visiting.remove(step_id)
+        visited.add(step_id)
+        return False
+
+    for step_id in dependencies:
+        if visit(step_id):
+            return [PlanIssue("error", "Plan dependency graph contains a cycle.", step_id)]
+    return []
+
+
 def choose_plan_shape(task: str) -> PlanShape:
     lowered = task.lower()
     if any(

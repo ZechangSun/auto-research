@@ -20,7 +20,8 @@ designing complex agent behavior.
 3. Convert the highest-value recommendation into a small implementation plan.
 4. Implement the change with normal coding-agent tools.
 5. Run relevant tests.
-6. Run the pipeline again when the task is substantial or the results changed the direction.
+6. Consolidate reusable lessons: `auto-research memory consolidate`.
+7. Run the pipeline again when the task is substantial or the results changed the direction.
 
 ## Memory
 
@@ -28,6 +29,9 @@ designing complex agent behavior.
 - Short-term memory lives in the current pipeline run and should keep focused records separate from the full trace.
 - Do not commit `.auto_research/`; it is local agent memory.
 - Use `--session-id` to group related work across multiple runs.
+- Use `auto-research memory remember "<fact>" --scope procedural --tag workflow` when the agent learns a durable method.
+- Use `auto-research memory search "<query>" --scope procedural` before repeating a complex workflow.
+- Use `auto-research memory consolidate` after substantial work.
 - Prefer scoped memory:
   - `working` for active task facts.
   - `episodic` for run observations.
@@ -52,6 +56,7 @@ Use classical retrieval before reaching for model context:
 - Use a graph plan for research, architecture, comparison, or uncertain tasks.
 - Execute dependency-ready nodes first.
 - Reflect after each meaningful node and update the plan when new evidence changes the route.
+- Lint plans for missing criteria, invalid edges, and cycles before trusting them.
 
 ## Decision Rules
 
@@ -62,6 +67,7 @@ Use classical retrieval before reaching for model context:
 - Add provider protocols before binding the pipeline to one search, model, browser, or coding-agent backend.
 - Reflection should name gaps, risks, and validation steps before claiming completion.
 - If the report conflicts with direct repo evidence, trust the repo evidence and update the pipeline or memory.
+- Promote only reusable lessons. Do not turn one-off task details into procedural memory.
 
 ## Useful Commands
 

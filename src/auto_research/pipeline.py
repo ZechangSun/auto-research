@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from auto_research.memory import LongTermMemory, MemoryRecord, MemoryQuery, MemoryScope, ShortTermMemory
-from auto_research.planning import Plan, StepStatus
+from auto_research.planning import Plan, StepStatus, lint_plan
 from auto_research.providers import (
     HeuristicPlanningProvider,
     HeuristicReflectionProvider,
@@ -76,6 +76,17 @@ class ResearchPipeline:
             self.short_term_memory.focus(memory)
 
         plan = self.planner.create_plan(task, memories)
+        for issue in lint_plan(plan):
+            issue_record = MemoryRecord(
+                kind="plan_issue",
+                content=f"{issue.severity}: {issue.message}",
+                scope=MemoryScope.REFLECTIVE,
+                importance=0.8 if issue.severity == "error" else 0.6,
+                tags=("planning", "lint"),
+                metadata={"task": task, "step_id": issue.step_id, "session_id": session_id},
+            )
+            self.short_term_memory.add(issue_record)
+            self.long_term_memory.add(issue_record)
         steps_executed = 0
         while steps_executed < max_steps and not plan.is_complete():
             ready_steps = plan.ready_steps() or plan.pending_steps()

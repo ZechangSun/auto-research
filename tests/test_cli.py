@@ -34,3 +34,30 @@ def test_cli_improve_writes_brief(tmp_path):
 
     assert exit_code == 0
     assert "Auto-Research Improvement Brief" in output.read_text(encoding="utf-8")
+
+
+def test_cli_memory_search_and_consolidate(tmp_path, capsys):
+    db = tmp_path / "memory.sqlite"
+
+    remember_code = main(
+        [
+            "memory",
+            "remember",
+            "Use BM25 retrieval workflow for memory.",
+            "--db",
+            str(db),
+            "--scope",
+            "episodic",
+            "--tag",
+            "retrieval",
+        ]
+    )
+    search_code = main(["memory", "search", "BM25 retrieval", "--db", str(db)])
+    consolidate_code = main(["memory", "consolidate", "--db", str(db)])
+
+    output = capsys.readouterr().out
+    assert remember_code == 0
+    assert search_code == 0
+    assert consolidate_code == 0
+    assert "bm25" in output.lower()
+    assert "Memory Consolidation" in output
