@@ -24,3 +24,13 @@ def test_long_term_memory_is_retrievable(tmp_path):
         memory.close()
 
     assert results
+
+
+def test_report_contains_only_observations(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    try:
+        report = ResearchPipeline(memory).run("Separate observations from reflection", max_steps=3)
+    finally:
+        memory.close()
+
+    assert all(record.kind == "observation" for record in report.observations)

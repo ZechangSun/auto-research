@@ -1,0 +1,7 @@
+interface:
+  display_name: "Auto-Research"
+  short_description: "Plan, remember, reflect, and improve repos"
+  default_prompt: "Use $auto-research to research this coding task, plan the work, and reflect on the result."
+
+policy:
+  allow_implicit_invocation: true

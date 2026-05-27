@@ -37,6 +37,31 @@ Useful options:
 - `--session-id`: Optional stable session id.
 - `--json`: Print a structured JSON report.
 
+You can also use explicit subcommands:
+
+```bash
+auto-research run "Research prompt"
+auto-research improve --repo .
+```
+
+`improve` writes `.auto_research/improvement_brief.md`, combining a repository
+snapshot with the pipeline's plan, observations, and reflection. This gives a
+coding agent a repeatable way to decide the next small improvement, implement it,
+test it, and run the loop again.
+
+## Coding-Agent Skill
+
+This repo includes a skill bundle at `skills/auto-research`. A coding agent can
+load that skill to use the package as an external research loop:
+
+```bash
+auto-research improve --repo .
+auto-research run "Research how to implement the current coding task"
+```
+
+The skill keeps local long-term memory under `.auto_research/memory.sqlite`,
+which is intentionally ignored by git.
+
 ## Architecture
 
 ```mermaid
@@ -72,4 +97,3 @@ Implement these protocols in `auto_research.providers`:
 That lets you wire the package to real search APIs, OpenAI models, browser
 automation, repository analysis tools, or a coding-agent execution loop without
 changing the orchestration code.
-
