@@ -99,31 +99,37 @@ class ResearchPipeline:
             )
             self.short_term_memory.add(issue_record)
             self.long_term_memory.add(issue_record)
-        return ResearchRunState(
+        state = ResearchRunState(
             task=task,
             plan=plan,
             session_id=session_id,
             max_steps=max_steps,
             status=RunStatus.COMPLETE if plan.is_complete() else RunStatus.ACTIVE,
         )
+        state.add_event("started", "Created initial research plan.")
+        return state
 
     def step(self, state: ResearchRunState) -> ResearchRunState:
         if state.status is not RunStatus.ACTIVE:
             return state
         if state.steps_executed >= state.max_steps:
             state.status = RunStatus.WAITING
+            state.add_event("budget", "Step budget reached; waiting for review or a larger budget.")
             return state
         if state.plan.is_complete():
             state.status = RunStatus.COMPLETE
+            state.add_event("complete", "Plan is complete.")
             return state
 
         ready_steps = state.plan.ready_steps() or state.plan.pending_steps()
         if not ready_steps:
             state.status = RunStatus.WAITING
+            state.add_event("waiting", "No dependency-ready step is available.")
             return state
 
         step = ready_steps[0]
         try:
+            state.add_event("step_started", f"Started step {step.id}.", step_id=step.id)
             step.status = StepStatus.RUNNING
             observation = self.researcher.research(
                 state.task,
@@ -132,8 +138,15 @@ class ResearchPipeline:
             )
         except Exception as exc:
             step.status = StepStatus.PENDING
+            state.retry_count += 1
             state.status = RunStatus.FAILED
             state.last_error = str(exc)
+            state.add_event(
+                "failed",
+                f"Step {step.id} failed: {exc}",
+                step_id=step.id,
+                metadata={"retry_count": state.retry_count, "max_retries": state.max_retries},
+            )
             return state
 
         step.observation = observation
@@ -149,6 +162,8 @@ class ResearchPipeline:
         self.short_term_memory.add(record)
         self.long_term_memory.add(record)
         state.steps_executed += 1
+        state.retry_count = 0
+        state.add_event("step_completed", f"Completed step {step.id}.", step_id=step.id)
 
         reflection = self.reflector.reflect(state.task, state.plan, self.short_term_memory.recent(20))
         reflection_record = MemoryRecord(
@@ -167,11 +182,18 @@ class ResearchPipeline:
         )
         self.short_term_memory.add(reflection_record)
         self.long_term_memory.add(reflection_record)
+        state.add_event(
+            "reflection",
+            reflection.summary,
+            metadata={"confidence": reflection.confidence, "gaps": reflection.gaps},
+        )
 
         if state.plan.is_complete() and not reflection.needs_more_work:
             state.status = RunStatus.COMPLETE
+            state.add_event("complete", "Plan completed with sufficient reflection confidence.")
         elif state.steps_executed >= state.max_steps:
             state.status = RunStatus.WAITING
+            state.add_event("budget", "Step budget reached after this step.")
         return state
 
     def report_from_state(self, state: ResearchRunState) -> ResearchReport:

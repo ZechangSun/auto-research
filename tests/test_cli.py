@@ -92,3 +92,44 @@ def test_cli_runs_start_step_status(tmp_path, capsys):
     assert status_code == 0
     assert "status=" in output
     assert "Long running research task" in output
+
+
+def test_cli_runs_multi_step_and_brief(tmp_path, capsys):
+    db = tmp_path / "memory.sqlite"
+    state_dir = tmp_path / "runs"
+
+    main(
+        [
+            "runs",
+            "start",
+            "Build an auto-research equipment brief",
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--max-steps",
+            "4",
+        ]
+    )
+    run_id = capsys.readouterr().out.split()[1]
+
+    step_code = main(
+        [
+            "runs",
+            "step",
+            run_id,
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--steps",
+            "2",
+        ]
+    )
+    brief_code = main(["runs", "brief", run_id, "--db", str(db), "--state-dir", str(state_dir)])
+
+    output = capsys.readouterr().out
+    assert step_code == 0
+    assert brief_code == 0
+    assert "Auto-Research Run Brief" in output
+    assert "Recent Events" in output

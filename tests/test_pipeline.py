@@ -3,6 +3,7 @@ from auto_research.pipeline import ResearchPipeline
 from auto_research.planning import Plan, PlanEdge, PlanShape, PlanStep, lint_plan
 from auto_research.consolidation import consolidate_memory
 from auto_research.run_state import RunStatus, RunStore
+from auto_research.workbench import render_run_brief
 
 
 def test_pipeline_produces_report(tmp_path):
@@ -129,3 +130,21 @@ def test_run_state_can_checkpoint_and_resume(tmp_path):
 
     assert resumed.steps_executed == 2
     assert resumed.status in {RunStatus.ACTIVE, RunStatus.WAITING, RunStatus.COMPLETE}
+    assert resumed.events
+    assert "Run the next step" in resumed.next_action() or resumed.status is not RunStatus.ACTIVE
+
+
+def test_run_brief_contains_events_and_next_action(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    try:
+        pipeline = ResearchPipeline(memory)
+        state = pipeline.start("Build an agent workbench", max_steps=2)
+        state = pipeline.step(state)
+        brief = render_run_brief(state, pipeline.report_from_state(state))
+    finally:
+        memory.close()
+
+    assert "Auto-Research Run Brief" in brief
+    assert "Next Action" in brief
+    assert "Recent Events" in brief
+    assert "step_completed" in brief

@@ -96,6 +96,7 @@ A long-running research loop needs state outside the model context:
 - Memory checkpoint boundaries.
 - Status: active, waiting, complete, or failed.
 - Error, retry, and wakeup metadata.
+- Event log entries for starts, completions, reflections, waits, retries, and failures.
 
 Use checkpointed stepping when:
 
@@ -111,3 +112,19 @@ Future design targets:
 - Budget and deadline policies.
 - Retry/backoff policies per provider.
 - Compaction from raw run trace into durable memory.
+
+## Agent Equipment View
+
+The agent should prefer a compact equipment view over replaying the full run.
+The view should include:
+
+- Current run id and status.
+- Next recommended action.
+- Step budget and progress.
+- Plan graph with statuses.
+- Recent event log.
+- Last error, if any.
+- Reflection confidence and gaps.
+
+This is enough to resume work after context loss, process restart, or a later
+wakeup without flooding the prompt with every observation.

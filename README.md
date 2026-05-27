@@ -50,8 +50,9 @@ auto-research memory remember "Prefer BM25 retrieval before embeddings" --scope 
 auto-research memory search "BM25 retrieval" --scope procedural
 auto-research memory consolidate
 auto-research runs start "Research a large implementation" --max-steps 12
-auto-research runs step <run-id>
+auto-research runs step <run-id> --steps 3
 auto-research runs status <run-id>
+auto-research runs brief <run-id>
 ```
 
 `improve` writes `.auto_research/improvement_brief.md`, combining a repository
@@ -117,6 +118,20 @@ Each `step` executes one dependency-ready plan node, stores observations and
 reflection in memory, then saves the run state. If the process stops, the agent
 can load the same run id and continue.
 
+For coding agents, `runs brief` is the main equipment view:
+
+```bash
+auto-research runs brief <run-id>
+```
+
+It shows run status, the next recommended action, plan progress, recent events,
+reflection, and gaps. Use it at the beginning of a work interval to recover
+context without loading the entire run history.
+
+Runs also keep an event log. Events record starts, completions, reflections,
+budget stops, retries, waits, and failures. This makes the run auditable and
+gives future memory consolidation better raw material.
+
 Current limitations:
 
 - Checkpoints are local JSON files, not a distributed job queue.
@@ -126,6 +141,18 @@ Current limitations:
   waiting state, not first-class blocking events.
 - Budgets, deadlines, cancellation, and retry policies are not yet modeled.
 - Provider calls are synchronous; async providers will need a richer executor.
+
+## Agent Equipment Pattern
+
+A coding agent can treat this repo as a small workbench:
+
+1. `runs start` creates the task file.
+2. `runs brief` restores situational awareness.
+3. `runs step --steps N` advances research during the current work interval.
+4. `memory search` retrieves reusable project knowledge.
+5. Normal coding tools implement the selected change.
+6. Tests validate it.
+7. `memory consolidate` turns reusable lessons into durable memory.
 
 ## Memory Design
 

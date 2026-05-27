@@ -11,6 +11,7 @@ from auto_research.improvement import improve_repository
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope
 from auto_research.pipeline import ResearchPipeline
 from auto_research.run_state import RunStatus, RunStore
+from auto_research.workbench import render_run_brief
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,12 +71,16 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     start.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
     start.add_argument("--max-steps", type=int, default=5)
+    start.add_argument("--max-retries", type=int, default=2)
     start.add_argument("--session-id", default=None)
 
     step = run_subcommands.add_parser("step", help="Advance a checkpointed run by one step.")
     step.add_argument("run_id", help="Run id to resume.")
     step.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     step.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    step.add_argument("--steps", type=int, default=1, help="Maximum checkpointed steps to run now.")
+    step.add_argument("--until-complete", action="store_true", help="Keep stepping until complete, failed, or waiting.")
+    step.add_argument("--retry", action="store_true", help="Retry a failed run if retry budget remains.")
     step.add_argument("--json", action="store_true")
 
     status = run_subcommands.add_parser("status", help="Show a checkpointed run.")
@@ -86,6 +91,11 @@ def build_parser() -> argparse.ArgumentParser:
     list_runs = run_subcommands.add_parser("list", help="List checkpointed runs.")
     list_runs.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
     list_runs.add_argument("--json", action="store_true")
+
+    brief = run_subcommands.add_parser("brief", help="Show an agent-facing run brief.")
+    brief.add_argument("run_id", help="Run id to summarize.")
+    brief.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    brief.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
     return parser
 
 
@@ -142,6 +152,7 @@ def _runs_command(args: argparse.Namespace) -> int:
                 max_steps=args.max_steps,
                 session_id=args.session_id,
             )
+            state.max_retries = args.max_retries
             store.save(state)
             print(f"Started {state.run_id} status={state.status.value}")
         finally:
@@ -150,16 +161,24 @@ def _runs_command(args: argparse.Namespace) -> int:
 
     if args.runs_command == "step":
         state = store.load(args.run_id)
-        if state.status is RunStatus.WAITING:
+        if state.status is RunStatus.FAILED and args.retry and state.retry_count <= state.max_retries:
+            state.status = RunStatus.ACTIVE
+            state.add_event("retry", "Retrying failed run.")
+        elif state.status is RunStatus.WAITING:
             state.status = RunStatus.ACTIVE
         memory = LongTermMemory(Path(args.db))
         try:
-            state = ResearchPipeline(memory).step(state)
+            pipeline = ResearchPipeline(memory)
+            step_limit = state.max_steps if args.until_complete else args.steps
+            for _ in range(step_limit):
+                if state.status is not RunStatus.ACTIVE:
+                    break
+                state = pipeline.step(state)
             store.save(state)
             if args.json:
                 print(json.dumps(state.to_dict(), indent=2, default=str))
             else:
-                report = ResearchPipeline(memory).report_from_state(state)
+                report = pipeline.report_from_state(state)
                 print(f"Run {state.run_id} status={state.status.value} steps={state.steps_executed}/{state.max_steps}")
                 print(report.to_markdown())
         finally:
@@ -173,6 +192,7 @@ def _runs_command(args: argparse.Namespace) -> int:
         else:
             print(f"Run {state.run_id} status={state.status.value} steps={state.steps_executed}/{state.max_steps}")
             print(f"Task: {state.task}")
+            print(f"Next: {state.next_action()}")
             for step in state.plan.steps:
                 print(f"- [{step.status.value}] {step.id}: {step.goal}")
         return 0
@@ -184,6 +204,16 @@ def _runs_command(args: argparse.Namespace) -> int:
         else:
             for state in states:
                 print(f"{state.run_id} {state.status.value} steps={state.steps_executed}/{state.max_steps} {state.task}")
+        return 0
+
+    if args.runs_command == "brief":
+        state = store.load(args.run_id)
+        memory = LongTermMemory(Path(args.db))
+        try:
+            report = ResearchPipeline(memory).report_from_state(state)
+            print(render_run_brief(state, report))
+        finally:
+            memory.close()
         return 0
     return 1
 

@@ -31,17 +31,26 @@ periodic reflection:
 
 ```bash
 auto-research runs start "Research and implement the feature" --max-steps 12
-auto-research runs step <run-id>
+auto-research runs brief <run-id>
+auto-research runs step <run-id> --steps 3
 auto-research runs status <run-id>
 auto-research runs list
 ```
 
-Run one `step` per wakeup or work interval. After each step, inspect status:
+Use `brief` at the start of each work interval. It is the agent-facing equipment
+view: task, status, next action, plan progress, recent events, reflection, and
+gaps.
+
+Run one or more checkpointed steps per wakeup or work interval. After each step,
+inspect status:
 
 - `active`: continue stepping.
 - `waiting`: needs another wakeup, higher max step budget, or external input.
 - `complete`: produce final summary and consolidate memory.
 - `failed`: inspect `last_error`, fix the provider/tool issue, then resume.
+
+Use `--steps N` for bounded progress and `--until-complete` only when the
+provider is deterministic enough to run unattended.
 
 Long-running limitations to remember:
 
@@ -49,6 +58,18 @@ Long-running limitations to remember:
 - There is no built-in scheduler yet.
 - Human approvals and external tool waits are not first-class events yet.
 - Budget, deadline, cancellation, and retry policies still need design.
+
+## Equipment Pattern
+
+For substantial coding work:
+
+1. Start or resume a run.
+2. Read `runs brief`.
+3. Execute a small number of steps.
+4. Implement the next concrete change with normal coding tools.
+5. Run tests.
+6. Remember or consolidate reusable lessons.
+7. Leave the run status and next action clear for the next wakeup.
 
 ## Memory
 
