@@ -2,7 +2,7 @@
 
 from auto_research.context import AssembledContext, OutputFormat, PromptAssembler, RoleProfile, TaskSpecification
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope, ShortTermMemory
-from auto_research.pipeline import ResearchPipeline, ResearchReport
+from auto_research.pipeline import AgentStepPrompt, ResearchPipeline, ResearchReport
 from auto_research.planning import Plan, PlanIssue, PlanShape, PlanStep, lint_plan
 from auto_research.reflection import Reflection
 from auto_research.run_state import ResearchRunState, RunEvent, RunStatus, RunStore
@@ -27,6 +27,7 @@ __all__ = [
     "RunStore",
     "ShortTermMemory",
     "AssembledContext",
+    "AgentStepPrompt",
     "DeterministicVerifier",
     "OutputFormat",
     "PromptAssembler",

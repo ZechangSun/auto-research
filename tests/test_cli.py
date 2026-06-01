@@ -170,3 +170,66 @@ def test_cli_runs_step_writes_prompt_file(tmp_path, capsys):
 
     assert exit_code == 0
     assert list(prompt_dir.glob(f"{run_id}/*.md"))
+
+
+def test_cli_agent_next_and_complete(tmp_path, capsys):
+    db = tmp_path / "memory.sqlite"
+    state_dir = tmp_path / "runs"
+    prompt_dir = tmp_path / "prompts"
+    observation_file = tmp_path / "observation.md"
+    observation_file.write_text(
+        "The coding agent completed this step using local tools and returned a detailed observation.",
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "runs",
+            "start",
+            "Use current coding agent as executor",
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--max-steps",
+            "2",
+        ]
+    )
+    run_id = capsys.readouterr().out.split()[1]
+    next_code = main(
+        [
+            "agent",
+            "next",
+            run_id,
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--prompt-dir",
+            str(prompt_dir),
+        ]
+    )
+    output = capsys.readouterr().out
+    step_id = [line for line in output.splitlines() if line.startswith("Step:")][0].split()[1]
+
+    complete_code = main(
+        [
+            "agent",
+            "complete",
+            run_id,
+            "--step-id",
+            step_id,
+            "--observation-file",
+            str(observation_file),
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert next_code == 0
+    assert complete_code == 0
+    assert "Auto-Research Run Brief" in output
+    assert list(prompt_dir.glob(f"{run_id}/*.md"))

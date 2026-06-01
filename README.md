@@ -200,6 +200,24 @@ The pipeline follows a persistent orchestrator loop:
 If verification fails, the run moves to `waiting` so the agent can inspect the
 brief, adjust the plan or executor, and resume.
 
+## Coding-Agent Bridge
+
+No model API is required. `auto-research` can hand work to the current coding
+agent through files:
+
+```bash
+auto-research runs start "Implement or research the task" --max-steps 8
+auto-research agent next <run-id>
+# The coding agent reads the printed prompt file and performs the work.
+auto-research agent complete <run-id> --step-id <step-id> --observation-file observation.md
+auto-research runs brief <run-id>
+```
+
+In this mode, `auto-research` is the orchestrator: it owns memory, planning,
+prompt assembly, checkpointing, verification, and archiving. The current coding
+agent is the executor: it reads the prompt artifact, uses built-in tools, and
+returns an observation. This is the preferred no-API path.
+
 ## Memory Design
 
 Memory is organized by scope:

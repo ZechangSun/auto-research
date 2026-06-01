@@ -99,12 +99,31 @@ def build_parser() -> argparse.ArgumentParser:
     brief.add_argument("run_id", help="Run id to summarize.")
     brief.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     brief.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+
+    agent = subcommands.add_parser("agent", help="Bridge auto-research with the current coding agent.")
+    agent_subcommands = agent.add_subparsers(dest="agent_command", required=True)
+
+    agent_next = agent_subcommands.add_parser("next", help="Prepare the next step prompt for the coding agent.")
+    agent_next.add_argument("run_id", help="Run id to prepare.")
+    agent_next.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    agent_next.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    agent_next.add_argument("--prompt-dir", default=None, help="Prompt artifact directory.")
+    agent_next.add_argument("--json", action="store_true")
+
+    agent_complete = agent_subcommands.add_parser("complete", help="Complete a prepared step with agent output.")
+    agent_complete.add_argument("run_id", help="Run id to update.")
+    agent_complete.add_argument("--step-id", required=True)
+    agent_complete.add_argument("--observation", default=None)
+    agent_complete.add_argument("--observation-file", default=None)
+    agent_complete.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    agent_complete.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    agent_complete.add_argument("--json", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in {"run", "improve", "memory", "runs", "-h", "--help"}:
+    if argv and argv[0] not in {"run", "improve", "memory", "runs", "agent", "-h", "--help"}:
         argv.insert(0, "run")
 
     args = build_parser().parse_args(argv)
@@ -129,6 +148,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "runs":
         return _runs_command(args)
 
+    if args.command == "agent":
+        return _agent_command(args)
+
     memory = LongTermMemory(Path(args.db))
     try:
         report = ResearchPipeline(memory, prompt_dir=args.prompt_dir).run(
@@ -143,6 +165,67 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         memory.close()
     return 0
+
+
+def _agent_command(args: argparse.Namespace) -> int:
+    store = RunStore(args.state_dir)
+    if args.agent_command == "next":
+        state = store.load(args.run_id)
+        if state.status is RunStatus.WAITING:
+            state.status = RunStatus.ACTIVE
+        memory = LongTermMemory(Path(args.db))
+        try:
+            pipeline = ResearchPipeline(
+                memory,
+                prompt_dir=args.prompt_dir or Path(args.state_dir) / "prompts",
+            )
+            prompt = pipeline.prepare_agent_step(state)
+            store.save(state)
+            if prompt is None:
+                payload = {"run_id": state.run_id, "status": state.status.value, "next_action": state.next_action()}
+            else:
+                payload = {
+                    "run_id": prompt.run_id,
+                    "step_id": prompt.step_id,
+                    "prompt_path": str(prompt.prompt_path) if prompt.prompt_path else None,
+                    "status": state.status.value,
+                    "next_action": "Read the prompt file, execute the step with coding-agent tools, then run `auto-research agent complete`.",
+                }
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(f"Run {payload['run_id']} status={payload['status']}")
+                if "step_id" in payload:
+                    print(f"Step: {payload['step_id']}")
+                    print(f"Prompt: {payload['prompt_path']}")
+                print(f"Next: {payload['next_action']}")
+        finally:
+            memory.close()
+        return 0
+
+    if args.agent_command == "complete":
+        if args.observation_file:
+            observation = Path(args.observation_file).read_text(encoding="utf-8")
+        elif args.observation:
+            observation = args.observation
+        else:
+            print("error: provide --observation or --observation-file")
+            return 2
+        state = store.load(args.run_id)
+        memory = LongTermMemory(Path(args.db))
+        try:
+            pipeline = ResearchPipeline(memory)
+            state = pipeline.complete_agent_step(state, args.step_id, observation)
+            store.save(state)
+            if args.json:
+                print(json.dumps(state.to_dict(), indent=2, default=str))
+            else:
+                print(f"Run {state.run_id} status={state.status.value} steps={state.steps_executed}/{state.max_steps}")
+                print(render_run_brief(state, pipeline.report_from_state(state)))
+        finally:
+            memory.close()
+        return 0
+    return 1
 
 
 def _runs_command(args: argparse.Namespace) -> int:

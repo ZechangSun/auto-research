@@ -5,7 +5,7 @@ from pathlib import Path
 
 from auto_research.context import PromptAssembler
 from auto_research.memory import LongTermMemory, MemoryRecord, MemoryQuery, MemoryScope, ShortTermMemory
-from auto_research.planning import Plan, StepStatus, lint_plan
+from auto_research.planning import Plan, PlanStep, StepStatus, lint_plan
 from auto_research.providers import (
     HeuristicPlanningProvider,
     HeuristicReflectionProvider,
@@ -57,6 +57,14 @@ class ResearchReport:
                 ["", "## Next Actions", *[f"- {action}" for action in self.reflection.next_actions]]
             )
         return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class AgentStepPrompt:
+    run_id: str
+    step_id: str
+    prompt_path: Path | None
+    content: str
 
 
 class ResearchPipeline:
@@ -119,41 +127,15 @@ class ResearchPipeline:
         return state
 
     def step(self, state: ResearchRunState) -> ResearchRunState:
-        if state.status is not RunStatus.ACTIVE:
+        agent_prompt = self.prepare_agent_step(state)
+        if agent_prompt is None:
             return state
-        if state.steps_executed >= state.max_steps:
-            state.status = RunStatus.WAITING
-            state.add_event("budget", "Step budget reached; waiting for review or a larger budget.")
+        step = self._step_by_id(state, agent_prompt.step_id)
+        if step is None:
+            state.status = RunStatus.FAILED
+            state.last_error = f"Prepared unknown step {agent_prompt.step_id}"
             return state
-        if state.plan.is_complete():
-            state.status = RunStatus.COMPLETE
-            state.add_event("complete", "Plan is complete.")
-            return state
-
-        ready_steps = state.plan.ready_steps() or state.plan.pending_steps()
-        if not ready_steps:
-            state.status = RunStatus.WAITING
-            state.add_event("waiting", "No dependency-ready step is available.")
-            return state
-
-        step = ready_steps[0]
-        recalled = self.short_term_memory.focused() + self.short_term_memory.recent(8)
-        assembled_context = self.prompt_assembler.assemble(state, step, recalled)
-        prompt_path = self._write_prompt_artifact(state, step.id, assembled_context.content)
-        state.add_event(
-            "prompt_assembled",
-            "Assembled deterministic model-view context.",
-            step_id=step.id,
-            metadata={
-                "cache_key": assembled_context.cache_key,
-                "fixed_layers": list(assembled_context.fixed_layers),
-                "variable_layers": list(assembled_context.variable_layers),
-                "prompt_path": str(prompt_path) if prompt_path else None,
-            },
-        )
         try:
-            state.add_event("step_started", f"Started step {step.id}.", step_id=step.id)
-            step.status = StepStatus.RUNNING
             observation = self.researcher.research(
                 state.task,
                 step,
@@ -171,7 +153,57 @@ class ResearchPipeline:
                 metadata={"retry_count": state.retry_count, "max_retries": state.max_retries},
             )
             return state
+        return self.complete_agent_step(state, step.id, observation)
 
+    def prepare_agent_step(self, state: ResearchRunState) -> AgentStepPrompt | None:
+        if state.status is not RunStatus.ACTIVE:
+            return None
+        if state.steps_executed >= state.max_steps:
+            state.status = RunStatus.WAITING
+            state.add_event("budget", "Step budget reached; waiting for review or a larger budget.")
+            return None
+        if state.plan.is_complete():
+            state.status = RunStatus.COMPLETE
+            state.add_event("complete", "Plan is complete.")
+            return None
+
+        ready_steps = state.plan.ready_steps() or state.plan.pending_steps()
+        if not ready_steps:
+            state.status = RunStatus.WAITING
+            state.add_event("waiting", "No dependency-ready step is available.")
+            return None
+
+        step = ready_steps[0]
+        recalled = self.short_term_memory.focused() + self.short_term_memory.recent(8)
+        assembled_context = self.prompt_assembler.assemble(state, step, recalled)
+        prompt_path = self._write_prompt_artifact(state, step.id, assembled_context.content)
+        state.add_event(
+            "prompt_assembled",
+            "Assembled deterministic model-view context.",
+            step_id=step.id,
+            metadata={
+                "cache_key": assembled_context.cache_key,
+                "fixed_layers": list(assembled_context.fixed_layers),
+                "variable_layers": list(assembled_context.variable_layers),
+                "prompt_path": str(prompt_path) if prompt_path else None,
+            },
+        )
+        state.add_event("step_started", f"Started step {step.id}.", step_id=step.id)
+        step.status = StepStatus.RUNNING
+        return AgentStepPrompt(
+            run_id=state.run_id,
+            step_id=step.id,
+            prompt_path=prompt_path,
+            content=assembled_context.content,
+        )
+
+    def complete_agent_step(self, state: ResearchRunState, step_id: str, observation: str) -> ResearchRunState:
+        step = self._step_by_id(state, step_id)
+        if step is None:
+            state.status = RunStatus.FAILED
+            state.last_error = f"Unknown step: {step_id}"
+            state.add_event("failed", state.last_error)
+            return state
         step.observation = observation
         step.status = StepStatus.COMPLETE
         verification = self.verifier.verify_step(state, step, observation)
@@ -245,6 +277,12 @@ class ResearchPipeline:
             state.status = RunStatus.WAITING
             state.add_event("budget", "Step budget reached after this step.")
         return state
+
+    def _step_by_id(self, state: ResearchRunState, step_id: str) -> PlanStep | None:
+        for step in state.plan.steps:
+            if step.id == step_id:
+                return step
+        return None
 
     def _write_prompt_artifact(
         self,

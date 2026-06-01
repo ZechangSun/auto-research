@@ -187,6 +187,27 @@ def test_pipeline_writes_prompt_artifact_and_verifies_step(tmp_path):
     assert any(event.type == "verification_passed" for event in state.events)
 
 
+def test_pipeline_supports_external_agent_completion(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    prompt_dir = tmp_path / "prompts"
+    try:
+        pipeline = ResearchPipeline(memory, prompt_dir=prompt_dir)
+        state = pipeline.start("Let coding agent execute the step", max_steps=2)
+        prompt = pipeline.prepare_agent_step(state)
+        assert prompt is not None
+        state = pipeline.complete_agent_step(
+            state,
+            prompt.step_id,
+            "The coding agent inspected the prompt, executed local tools, and produced a substantial observation.",
+        )
+    finally:
+        memory.close()
+
+    assert state.steps_executed == 1
+    assert any(event.type == "verification_passed" for event in state.events)
+    assert list(prompt_dir.glob(f"{state.run_id}/*.md"))
+
+
 def test_deterministic_verifier_rejects_empty_observation(tmp_path):
     memory = LongTermMemory(tmp_path / "memory.sqlite")
     try:

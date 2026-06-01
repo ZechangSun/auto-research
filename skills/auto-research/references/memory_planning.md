@@ -149,6 +149,19 @@ Variable layers should be injected per round:
 The orchestrator should pass prompt file paths to executors or subagents instead
 of stuffing full prompt artifacts into its own context.
 
+## No-API Execution
+
+The default no-API execution mode is a file handoff:
+
+- `agent next` prepares the next dependency-ready step and writes the prompt.
+- The coding agent reads the prompt file and performs the work with built-in tools.
+- The agent writes a concise observation to a file.
+- `agent complete` archives the observation, runs deterministic verification,
+  reflects, and saves the checkpoint.
+
+This makes the coding agent itself the planner/executor intelligence while the
+package remains the durable orchestration layer.
+
 ## Verification Gate
 
 Keep review and verification separate:

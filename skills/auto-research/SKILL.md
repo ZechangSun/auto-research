@@ -78,6 +78,22 @@ For substantial coding work:
 6. Remember or consolidate reusable lessons.
 7. Leave the run status and next action clear for the next wakeup.
 
+## No-API Agent Bridge
+
+When no external LLM API is available, use the current coding agent as executor:
+
+```bash
+auto-research agent next <run-id>
+# read the prompt path printed by the command
+# execute the step with normal coding-agent tools
+auto-research agent complete <run-id> --step-id <step-id> --observation-file observation.md
+```
+
+The bridge is file-based. `auto-research` prepares deterministic context and
+stores state; the coding agent reads the prompt file and writes back the result.
+Use this mode for real work inside Codex instead of relying on the heuristic
+research provider.
+
 ## Goal Loop Model
 
 Use this mental model:
