@@ -44,6 +44,40 @@ reproduce-tsdfm eval --config reproductions/ts_dfm_2511_17229/configs/smoke.yaml
 The smoke configuration is intended to verify the pipeline, not reproduce the
 reported benchmark numbers.
 
+Verified locally on 2026-06-01 with Python 3.14:
+
+- `pip install -e ".[ts-dfm,dev]"`
+- `reproduce-tsdfm make-synthetic ...`
+- `reproduce-tsdfm train --config .../smoke.yaml`
+- `reproduce-tsdfm eval --config .../smoke.yaml`
+- `pytest`
+
+## Data Download And Conversion
+
+Transition1X is a large HDF5 dataset. The DOI resolves to Figshare, but some
+networks block direct Figshare access. Try:
+
+```bash
+reproduce-tsdfm download transition1x --output reproductions/ts_dfm_2511_17229/data/Transition1x.h5
+```
+
+If Figshare returns 403 on your network, download `Transition1x.h5` manually from
+`https://doi.org/10.6084/m9.figshare.19614657.v4` and place it at the same path.
+In this workspace, direct Figshare download attempts returned `HTTP 403
+Forbidden`, while the GitLab metadata repository remained reachable. The
+converter and smoke pipeline were therefore tested with synthetic data and a
+mock HDF5 file matching the official Transition1X group layout.
+
+Then extract a small JSONL subset:
+
+```bash
+reproduce-tsdfm convert-transition1x \
+  --input reproductions/ts_dfm_2511_17229/data/Transition1x.h5 \
+  --output reproductions/ts_dfm_2511_17229/data/transition1x_sample.jsonl \
+  --split train \
+  --limit 128
+```
+
 ## Full Reproduction Plan
 
 1. Download Transition1X and extract reactant/product/TS triplets.
@@ -61,4 +95,4 @@ reported benchmark numbers.
 - Full CI-NEB, Hessian, IRC, and DFT/MLIP experiments are provided as integration
   targets, not executed by the smoke test.
 - Dataset converters must be adapted to the exact downloaded Transition1X/RGD1
-  file layout.
+  file layout if the upstream HDF5 schema changes.

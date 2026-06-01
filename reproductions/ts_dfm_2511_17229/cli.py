@@ -5,7 +5,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from reproductions.ts_dfm_2511_17229.data import make_synthetic_rows, write_jsonl
+from reproductions.ts_dfm_2511_17229.data import (
+    convert_transition1x,
+    download_dataset,
+    make_synthetic_rows,
+    write_jsonl,
+)
 from reproductions.ts_dfm_2511_17229.flow import evaluate, train
 
 
@@ -27,6 +32,16 @@ def build_parser() -> argparse.ArgumentParser:
     synthetic.add_argument("--atoms", type=int, default=5)
     synthetic.add_argument("--seed", type=int, default=7)
 
+    download = commands.add_parser("download", help="Download a public dataset.")
+    download.add_argument("name", choices=["transition1x", "rgd1"])
+    download.add_argument("--output", required=True)
+
+    convert = commands.add_parser("convert-transition1x", help="Extract JSONL triplets from Transition1X HDF5.")
+    convert.add_argument("--input", required=True)
+    convert.add_argument("--output", required=True)
+    convert.add_argument("--split", default="train")
+    convert.add_argument("--limit", type=int, default=128)
+
     train_cmd = commands.add_parser("train", help="Train the TS-DFM scaffold.")
     train_cmd.add_argument("--config", required=True)
 
@@ -37,18 +52,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command == "make-synthetic":
-        write_jsonl(args.output, make_synthetic_rows(args.count, args.atoms, args.seed))
-        print(f"Wrote {args.output}")
-        return 0
-    if args.command == "train":
-        train(load_yaml(args.config))
-        print("Training complete")
-        return 0
-    if args.command == "eval":
-        metrics = evaluate(load_yaml(args.config))
-        print(json.dumps(metrics, indent=2))
-        return 0
+    try:
+        if args.command == "make-synthetic":
+            write_jsonl(args.output, make_synthetic_rows(args.count, args.atoms, args.seed))
+            print(f"Wrote {args.output}")
+            return 0
+        if args.command == "download":
+            path = download_dataset(args.name, args.output)
+            print(f"Downloaded {path}")
+            return 0
+        if args.command == "convert-transition1x":
+            count = convert_transition1x(args.input, args.output, split=args.split, limit=args.limit)
+            print(f"Wrote {count} reactions to {args.output}")
+            return 0
+        if args.command == "train":
+            train(load_yaml(args.config))
+            print("Training complete")
+            return 0
+        if args.command == "eval":
+            metrics = evaluate(load_yaml(args.config))
+            print(json.dumps(metrics, indent=2))
+            return 0
+    except RuntimeError as exc:
+        print(f"error: {exc}")
+        return 2
     return 1
 
 

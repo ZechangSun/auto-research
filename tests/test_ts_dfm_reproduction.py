@@ -40,3 +40,23 @@ def test_synthetic_rows_have_reaction_triplets():
 
     assert len(rows) == 2
     assert set(rows[0]) == {"z", "reactant", "product", "ts"}
+
+
+def test_convert_transition1x_reads_official_hdf5_shape(tmp_path):
+    h5py = pytest.importorskip("h5py")
+    from reproductions.ts_dfm_2511_17229.data import convert_transition1x, load_jsonl
+
+    h5_path = tmp_path / "Transition1x.h5"
+    with h5py.File(h5_path, "w") as handle:
+        reaction = handle.create_group("train/C2H6/rxn000")
+        for name in ["reactant", "product", "transition_state"]:
+            group = reaction.create_group(name)
+            group.create_dataset("atomic_numbers", data=np.array([6, 6, 1, 1]))
+            group.create_dataset("positions", data=np.zeros((1, 4, 3)))
+
+    output = tmp_path / "sample.jsonl"
+    count = convert_transition1x(h5_path, output, split="train", limit=1)
+
+    rows = load_jsonl(output)
+    assert count == 1
+    assert rows[0]["z"] == [6, 6, 1, 1]
