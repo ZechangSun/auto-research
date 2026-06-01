@@ -64,9 +64,28 @@ provider is deterministic enough to run unattended.
 Long-running limitations to remember:
 
 - Current checkpoints are local JSON files.
-- There is no built-in scheduler yet.
+- The scheduler is cooperative; another process must call `schedules run-due`.
 - External tool waits are not first-class events yet.
 - Budget, deadline, cancellation, and retry policies still need design.
+
+## Periodic Execution
+
+Use schedules for long-term tasks that should be revisited regularly:
+
+```bash
+auto-research schedules create \
+  "Review reproduction progress and choose the next experiment" \
+  --every-minutes 1440 \
+  --steps 1 \
+  --max-steps 4
+auto-research schedules list
+auto-research schedules run-due
+```
+
+An external cron, CI job, or Codex automation should call `run-due`. Each due
+task creates a checkpointed run with `session_id=schedule:<task-id>`, advances a
+bounded number of steps, and records execution history in
+`.auto_research/schedules.json`.
 
 ## Human-In-The-Loop
 

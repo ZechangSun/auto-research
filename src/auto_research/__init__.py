@@ -14,6 +14,7 @@ from auto_research.pipeline import AgentStepPrompt, ResearchPipeline, ResearchRe
 from auto_research.planning import Plan, PlanIssue, PlanShape, PlanStep, lint_plan
 from auto_research.reflection import Reflection
 from auto_research.run_state import ResearchRunState, RunEvent, RunStatus, RunStore
+from auto_research.scheduler import ScheduleExecution, ScheduleStore, ScheduledTask
 from auto_research.verifier import DeterministicVerifier, VerificationCheck, VerificationReport
 from auto_research.workbench import render_run_brief
 
@@ -40,6 +41,9 @@ __all__ = [
     "RunEvent",
     "RunStatus",
     "RunStore",
+    "ScheduleExecution",
+    "ScheduleStore",
+    "ScheduledTask",
     "ShortTermMemory",
     "AssembledContext",
     "AgentStepPrompt",

@@ -324,3 +324,51 @@ def test_cli_compare_reports_regression_against_git_base(tmp_path, capsys):
     assert exit_code == 1
     assert "regression" in output
     assert '"status": "regression"' in (tmp_path / "comparisons.jsonl").read_text(encoding="utf-8")
+
+
+def test_cli_schedules_create_list_and_run_due(tmp_path, capsys):
+    db = tmp_path / "memory.sqlite"
+    state_dir = tmp_path / "runs"
+    schedule_file = tmp_path / "schedules.json"
+    now = "2026-06-01T00:00:00+00:00"
+
+    create_code = main(
+        [
+            "schedules",
+            "create",
+            "Review long-running TS-DFM reproduction progress",
+            "--every-minutes",
+            "30",
+            "--steps",
+            "1",
+            "--max-steps",
+            "2",
+            "--schedule-file",
+            str(schedule_file),
+            "--now",
+            now,
+        ]
+    )
+    list_code = main(["schedules", "list", "--schedule-file", str(schedule_file)])
+    due_code = main(
+        [
+            "schedules",
+            "run-due",
+            "--schedule-file",
+            str(schedule_file),
+            "--state-dir",
+            str(state_dir),
+            "--db",
+            str(db),
+            "--now",
+            now,
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert create_code == 0
+    assert list_code == 0
+    assert due_code == 0
+    assert "Review long-running TS-DFM" in output
+    assert "executed" in output
+    assert list(state_dir.glob("*.json"))

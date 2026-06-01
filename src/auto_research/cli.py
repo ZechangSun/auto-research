@@ -13,6 +13,7 @@ from auto_research.improvement import improve_repository
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope
 from auto_research.pipeline import ResearchPipeline
 from auto_research.run_state import RunStatus, RunStore
+from auto_research.scheduler import ScheduleStore, ScheduledTask, format_time, parse_time
 from auto_research.workbench import render_run_brief
 
 
@@ -165,12 +166,37 @@ def build_parser() -> argparse.ArgumentParser:
     human_respond.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     human_respond.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
     human_respond.add_argument("--json", action="store_true")
+
+    schedules = subcommands.add_parser("schedules", help="Create and run periodic long-term tasks.")
+    schedule_subcommands = schedules.add_subparsers(dest="schedules_command", required=True)
+
+    schedule_create = schedule_subcommands.add_parser("create", help="Create a periodic research task.")
+    schedule_create.add_argument("task", help="Task to run periodically.")
+    schedule_create.add_argument("--every-minutes", type=int, required=True)
+    schedule_create.add_argument("--steps", type=int, default=1, help="Steps to execute per due run.")
+    schedule_create.add_argument("--max-steps", type=int, default=5, help="Max steps for each created run.")
+    schedule_create.add_argument("--schedule-file", default=".auto_research/schedules.json")
+    schedule_create.add_argument("--now", default=None, help="ISO timestamp for deterministic scheduling.")
+    schedule_create.add_argument("--json", action="store_true")
+
+    schedule_list = schedule_subcommands.add_parser("list", help="List periodic research tasks.")
+    schedule_list.add_argument("--schedule-file", default=".auto_research/schedules.json")
+    schedule_list.add_argument("--json", action="store_true")
+
+    schedule_due = schedule_subcommands.add_parser("run-due", help="Run due periodic research tasks.")
+    schedule_due.add_argument("--schedule-file", default=".auto_research/schedules.json")
+    schedule_due.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    schedule_due.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    schedule_due.add_argument("--prompt-dir", default=None, help="Prompt artifact directory.")
+    schedule_due.add_argument("--now", default=None, help="ISO timestamp for deterministic scheduling.")
+    schedule_due.add_argument("--json", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in {"run", "compare", "improve", "memory", "runs", "agent", "human", "-h", "--help"}:
+    known_commands = {"run", "compare", "improve", "memory", "runs", "agent", "human", "schedules", "-h", "--help"}
+    if argv and argv[0] not in known_commands:
         argv.insert(0, "run")
 
     args = build_parser().parse_args(argv)
@@ -220,6 +246,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "human":
         return _human_command(args)
 
+    if args.command == "schedules":
+        return _schedules_command(args)
+
     memory = LongTermMemory(Path(args.db))
     try:
         report = ResearchPipeline(memory, prompt_dir=args.prompt_dir).run(
@@ -234,6 +263,73 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         memory.close()
     return 0
+
+
+def _schedules_command(args: argparse.Namespace) -> int:
+    store = ScheduleStore(args.schedule_file)
+    if args.schedules_command == "create":
+        now = parse_time(args.now)
+        task = ScheduledTask(
+            task=args.task,
+            every_minutes=args.every_minutes,
+            steps=args.steps,
+            max_steps=args.max_steps,
+            next_run_at=format_time(now),
+        )
+        store.add(task)
+        if args.json:
+            print(json.dumps(task.to_dict(), indent=2, default=str))
+        else:
+            print(f"Scheduled {task.id} every={task.every_minutes}m next={task.next_run_at}")
+            print(task.task)
+        return 0
+
+    if args.schedules_command == "list":
+        tasks = store.load()
+        if args.json:
+            print(json.dumps({"tasks": [task.to_dict() for task in tasks]}, indent=2, default=str))
+        else:
+            for task in tasks:
+                print(f"{task.id} [{task.status}] every={task.every_minutes}m next={task.next_run_at} {task.task}")
+        return 0
+
+    if args.schedules_command == "run-due":
+        now = parse_time(args.now)
+        tasks = store.load()
+        due_tasks = [task for task in tasks if task.is_due(now)]
+        executions = []
+        memory = LongTermMemory(Path(args.db))
+        run_store = RunStore(args.state_dir)
+        try:
+            pipeline = ResearchPipeline(
+                memory,
+                prompt_dir=args.prompt_dir or Path(args.state_dir) / "prompts",
+            )
+            for task in due_tasks:
+                state = pipeline.start(
+                    task.task,
+                    max_steps=task.max_steps,
+                    session_id=f"schedule:{task.id}",
+                )
+                for _ in range(task.steps):
+                    if state.status is not RunStatus.ACTIVE:
+                        break
+                    state = pipeline.step(state)
+                run_store.save(state)
+                task.mark_executed(state.run_id, state.status.value, now)
+                executions.append({"task_id": task.id, "run_id": state.run_id, "status": state.status.value})
+            store.save(tasks)
+        finally:
+            memory.close()
+        if args.json:
+            print(json.dumps({"executions": executions}, indent=2, default=str))
+        else:
+            if not executions:
+                print("No due schedules.")
+            for execution in executions:
+                print(f"executed {execution['task_id']} run={execution['run_id']} status={execution['status']}")
+        return 0
+    return 1
 
 
 def _human_command(args: argparse.Namespace) -> int:

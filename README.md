@@ -57,6 +57,8 @@ auto-research runs start "Research a large implementation" --max-steps 12
 auto-research runs step <run-id> --steps 3
 auto-research runs status <run-id>
 auto-research runs brief <run-id>
+auto-research schedules create "Review TS-DFM progress and choose next experiment" --every-minutes 1440
+auto-research schedules run-due
 auto-research human request <run-id> --kind approval --prompt "Approve the next experiment?"
 auto-research human respond <run-id> --decision approve --content "Approved; keep the first run small."
 ```
@@ -173,6 +175,29 @@ Runs also keep an event log. Events record starts, completions, reflections,
 budget stops, retries, waits, and failures. This makes the run auditable and
 gives future memory consolidation better raw material.
 
+## Periodic Schedules
+
+Use schedules when a long-term research task should be revisited on a cadence.
+`auto-research` does not run a daemon; an external cron, CI job, or Codex
+automation should call `run-due` periodically:
+
+```bash
+auto-research schedules create \
+  "Review TS-DFM reproduction progress and choose the next experiment" \
+  --every-minutes 1440 \
+  --steps 1 \
+  --max-steps 4
+
+auto-research schedules list
+auto-research schedules run-due
+```
+
+The schedule file defaults to `.auto_research/schedules.json`. Each due task
+creates a checkpointed run with `session_id=schedule:<task-id>`, advances the
+configured number of steps, stores the run under `.auto_research/runs`, and
+records execution history back into the schedule file. This keeps the agent
+stateful without requiring a permanently running process.
+
 Each checkpointed step also assembles a model-view prompt file. The prompt uses
 stable fixed layers first, then variable per-round layers:
 
@@ -206,8 +231,7 @@ for replanning.
 Current limitations:
 
 - Checkpoints are local JSON files, not a distributed job queue.
-- There is no scheduler or heartbeat loop yet; another process must call
-  `runs step`.
+- The scheduler is cooperative; another process must call `schedules run-due`.
 - External waits and browser jobs are represented only as waiting state, not
   first-class blocking events.
 - Budgets, deadlines, cancellation, and retry policies are not yet modeled.
