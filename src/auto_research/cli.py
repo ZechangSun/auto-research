@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     run.add_argument("--max-steps", type=int, default=5, help="Maximum research steps to run.")
     run.add_argument("--session-id", default=None, help="Optional stable session id.")
+    run.add_argument("--prompt-dir", default=None, help="Optional directory for assembled prompt files.")
     run.add_argument("--json", action="store_true", help="Print a structured JSON report.")
 
     improve = subcommands.add_parser("improve", help="Research improvements for a repository.")
@@ -70,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("task", help="Research task or coding-agent prompt.")
     start.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     start.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    start.add_argument("--prompt-dir", default=None, help="Prompt artifact directory.")
     start.add_argument("--max-steps", type=int, default=5)
     start.add_argument("--max-retries", type=int, default=2)
     start.add_argument("--session-id", default=None)
@@ -78,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     step.add_argument("run_id", help="Run id to resume.")
     step.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     step.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    step.add_argument("--prompt-dir", default=None, help="Prompt artifact directory.")
     step.add_argument("--steps", type=int, default=1, help="Maximum checkpointed steps to run now.")
     step.add_argument("--until-complete", action="store_true", help="Keep stepping until complete, failed, or waiting.")
     step.add_argument("--retry", action="store_true", help="Retry a failed run if retry budget remains.")
@@ -128,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
 
     memory = LongTermMemory(Path(args.db))
     try:
-        report = ResearchPipeline(memory).run(
+        report = ResearchPipeline(memory, prompt_dir=args.prompt_dir).run(
             task=args.task,
             max_steps=args.max_steps,
             session_id=args.session_id,
@@ -147,7 +150,10 @@ def _runs_command(args: argparse.Namespace) -> int:
     if args.runs_command == "start":
         memory = LongTermMemory(Path(args.db))
         try:
-            state = ResearchPipeline(memory).start(
+            state = ResearchPipeline(
+                memory,
+                prompt_dir=args.prompt_dir or Path(args.state_dir) / "prompts",
+            ).start(
                 args.task,
                 max_steps=args.max_steps,
                 session_id=args.session_id,
@@ -168,7 +174,10 @@ def _runs_command(args: argparse.Namespace) -> int:
             state.status = RunStatus.ACTIVE
         memory = LongTermMemory(Path(args.db))
         try:
-            pipeline = ResearchPipeline(memory)
+            pipeline = ResearchPipeline(
+                memory,
+                prompt_dir=args.prompt_dir or Path(args.state_dir) / "prompts",
+            )
             step_limit = state.max_steps if args.until_complete else args.steps
             for _ in range(step_limit):
                 if state.status is not RunStatus.ACTIVE:

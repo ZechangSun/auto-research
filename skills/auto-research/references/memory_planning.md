@@ -128,3 +128,33 @@ The view should include:
 
 This is enough to resume work after context loss, process restart, or a later
 wakeup without flooding the prompt with every observation.
+
+## Model-View Prompt Assembly
+
+Assemble prompt artifacts deterministically before execution.
+
+Fixed layers should come first for cache stability:
+
+- Role profile: identity, skills, behavioral boundaries.
+- Task specification: goal, allowed tools, output constraints.
+- Output format: return schema and stop conditions.
+
+Variable layers should be injected per round:
+
+- Reference injection: deterministic lookup triggered by task/step keywords.
+- Plan: direction, objectives, dependencies, retrieval hints.
+- Memory recall: scoped and relevance-ranked memories.
+- State context: outline, distant summary, recent events, current run status.
+
+The orchestrator should pass prompt file paths to executors or subagents instead
+of stuffing full prompt artifacts into its own context.
+
+## Verification Gate
+
+Keep review and verification separate:
+
+- Review can be model-assisted and qualitative.
+- Verifier should be deterministic and machine-authoritative.
+- Required checks: correctness, completeness, integrity.
+- Failed verification should move the run to waiting, not done.
+- Verification output should be archived as reflective memory.

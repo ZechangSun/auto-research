@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
+from auto_research.context import PromptAssembler
 from auto_research.memory import LongTermMemory, MemoryRecord, MemoryQuery, MemoryScope, ShortTermMemory
 from auto_research.planning import Plan, StepStatus, lint_plan
 from auto_research.providers import (
@@ -14,6 +16,7 @@ from auto_research.providers import (
 )
 from auto_research.reflection import Reflection
 from auto_research.run_state import ResearchRunState, RunStatus
+from auto_research.verifier import DeterministicVerifier
 
 
 @dataclass(frozen=True)
@@ -64,12 +67,18 @@ class ResearchPipeline:
         planner: PlanningProvider | None = None,
         researcher: ResearchProvider | None = None,
         reflector: ReflectionProvider | None = None,
+        prompt_assembler: PromptAssembler | None = None,
+        verifier: DeterministicVerifier | None = None,
+        prompt_dir: str | Path | None = None,
     ) -> None:
         self.long_term_memory = long_term_memory
         self.short_term_memory = short_term_memory or ShortTermMemory()
         self.planner = planner or HeuristicPlanningProvider()
         self.researcher = researcher or HeuristicResearchProvider()
         self.reflector = reflector or HeuristicReflectionProvider()
+        self.prompt_assembler = prompt_assembler or PromptAssembler()
+        self.verifier = verifier or DeterministicVerifier()
+        self.prompt_dir = Path(prompt_dir) if prompt_dir else None
 
     def run(self, task: str, max_steps: int = 5, session_id: str | None = None) -> ResearchReport:
         state = self.start(task, max_steps=max_steps, session_id=session_id)
@@ -128,6 +137,20 @@ class ResearchPipeline:
             return state
 
         step = ready_steps[0]
+        recalled = self.short_term_memory.focused() + self.short_term_memory.recent(8)
+        assembled_context = self.prompt_assembler.assemble(state, step, recalled)
+        prompt_path = self._write_prompt_artifact(state, step.id, assembled_context.content)
+        state.add_event(
+            "prompt_assembled",
+            "Assembled deterministic model-view context.",
+            step_id=step.id,
+            metadata={
+                "cache_key": assembled_context.cache_key,
+                "fixed_layers": list(assembled_context.fixed_layers),
+                "variable_layers": list(assembled_context.variable_layers),
+                "prompt_path": str(prompt_path) if prompt_path else None,
+            },
+        )
         try:
             state.add_event("step_started", f"Started step {step.id}.", step_id=step.id)
             step.status = StepStatus.RUNNING
@@ -151,6 +174,33 @@ class ResearchPipeline:
 
         step.observation = observation
         step.status = StepStatus.COMPLETE
+        verification = self.verifier.verify_step(state, step, observation)
+        verification_record = MemoryRecord(
+            kind="verification",
+            content=verification.summary(),
+            scope=MemoryScope.REFLECTIVE,
+            importance=0.7 if verification.passed else 0.9,
+            confidence=1.0,
+            tags=("verification", step.id),
+            metadata={
+                "task": state.task,
+                "step_id": step.id,
+                "session_id": state.session_id,
+                "passed": verification.passed,
+                "checks": [check.__dict__ for check in verification.checks],
+            },
+        )
+        self.short_term_memory.add(verification_record)
+        self.long_term_memory.add(verification_record)
+        state.add_event(
+            "verification_passed" if verification.passed else "verification_failed",
+            verification.summary(),
+            step_id=step.id,
+        )
+        if not verification.passed:
+            state.status = RunStatus.WAITING
+            state.add_event("waiting", "Verifier failed; waiting for plan or executor correction.", step_id=step.id)
+            return state
         record = MemoryRecord(
             kind="observation",
             content=observation,
@@ -195,6 +245,19 @@ class ResearchPipeline:
             state.status = RunStatus.WAITING
             state.add_event("budget", "Step budget reached after this step.")
         return state
+
+    def _write_prompt_artifact(
+        self,
+        state: ResearchRunState,
+        step_id: str,
+        content: str,
+    ) -> Path | None:
+        if self.prompt_dir is None:
+            return None
+        target = self.prompt_dir / state.run_id / f"{state.steps_executed + 1:03d}-{step_id}.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return target
 
     def report_from_state(self, state: ResearchRunState) -> ResearchReport:
         final_reflection = self.reflector.reflect(state.task, state.plan, self.short_term_memory.recent(20))

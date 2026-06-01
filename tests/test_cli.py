@@ -133,3 +133,40 @@ def test_cli_runs_multi_step_and_brief(tmp_path, capsys):
     assert brief_code == 0
     assert "Auto-Research Run Brief" in output
     assert "Recent Events" in output
+
+
+def test_cli_runs_step_writes_prompt_file(tmp_path, capsys):
+    db = tmp_path / "memory.sqlite"
+    state_dir = tmp_path / "runs"
+    prompt_dir = tmp_path / "prompts"
+
+    main(
+        [
+            "runs",
+            "start",
+            "Write deterministic prompt files",
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--prompt-dir",
+            str(prompt_dir),
+        ]
+    )
+    run_id = capsys.readouterr().out.split()[1]
+    exit_code = main(
+        [
+            "runs",
+            "step",
+            run_id,
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--prompt-dir",
+            str(prompt_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    assert list(prompt_dir.glob(f"{run_id}/*.md"))

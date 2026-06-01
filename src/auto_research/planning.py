@@ -188,7 +188,18 @@ def choose_plan_shape(task: str) -> PlanShape:
     if any(
         marker in lowered
         for marker in ["compare", "explore", "research", "investigate", "graph", "memory", "planning"]
-        + ["reflect", "reflection", "long-running", "long running", "checkpoint", "resume"]
+        + [
+            "reflect",
+            "reflection",
+            "long-running",
+            "long running",
+            "checkpoint",
+            "resume",
+            "optimize",
+            "pipeline",
+            "model-view",
+            "model view",
+        ]
     ):
         return PlanShape.GRAPH
     if any(marker in lowered for marker in ["break down", "decompose", "build", "implement"]):

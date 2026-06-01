@@ -1,8 +1,10 @@
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope
 from auto_research.pipeline import ResearchPipeline
-from auto_research.planning import Plan, PlanEdge, PlanShape, PlanStep, lint_plan
+from auto_research.planning import Plan, PlanEdge, PlanShape, PlanStep, StepStatus, lint_plan
 from auto_research.consolidation import consolidate_memory
+from auto_research.context import PromptAssembler
 from auto_research.run_state import RunStatus, RunStore
+from auto_research.verifier import DeterministicVerifier
 from auto_research.workbench import render_run_brief
 
 
@@ -148,3 +150,52 @@ def test_run_brief_contains_events_and_next_action(tmp_path):
     assert "Next Action" in brief
     assert "Recent Events" in brief
     assert "step_completed" in brief
+
+
+def test_prompt_assembler_exposes_fixed_and_variable_layers(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    try:
+        pipeline = ResearchPipeline(memory)
+        state = pipeline.start("Assemble deterministic model view", max_steps=2)
+        step = state.plan.ready_steps()[0]
+        context = PromptAssembler().assemble(state, step, [])
+    finally:
+        memory.close()
+
+    assert "Role Profile" in context.content
+    assert "Task Specification" in context.content
+    assert "Memory Recall" in context.content
+    assert context.cache_key
+    assert "role_profile" in context.fixed_layers
+    assert "state_context" in context.variable_layers
+
+
+def test_pipeline_writes_prompt_artifact_and_verifies_step(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    prompt_dir = tmp_path / "prompts"
+    try:
+        pipeline = ResearchPipeline(memory, prompt_dir=prompt_dir)
+        state = pipeline.start("Verify prompt artifacts", max_steps=2)
+        state = pipeline.step(state)
+    finally:
+        memory.close()
+
+    prompt_files = list(prompt_dir.glob(f"{state.run_id}/*.md"))
+    assert prompt_files
+    assert "Role Profile" in prompt_files[0].read_text(encoding="utf-8")
+    assert any(event.type == "prompt_assembled" for event in state.events)
+    assert any(event.type == "verification_passed" for event in state.events)
+
+
+def test_deterministic_verifier_rejects_empty_observation(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    try:
+        pipeline = ResearchPipeline(memory)
+        state = pipeline.start("Verify bad observation", max_steps=1)
+        step = state.plan.ready_steps()[0]
+        step.status = StepStatus.COMPLETE
+        report = DeterministicVerifier().verify_step(state, step, "")
+    finally:
+        memory.close()
+
+    assert not report.passed

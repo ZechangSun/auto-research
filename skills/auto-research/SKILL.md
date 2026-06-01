@@ -41,6 +41,13 @@ Use `brief` at the start of each work interval. It is the agent-facing equipment
 view: task, status, next action, plan progress, recent events, reflection, and
 gaps.
 
+Each step assembles a deterministic model-view prompt file. Treat that file as
+the subagent/bootstrap input:
+
+- Fixed layers: role profile, task specification, output format.
+- Variable layers: reference injection, plan, memory recall, state context.
+- Default location: `.auto_research/runs/prompts/<run-id>/`.
+
 Run one or more checkpointed steps per wakeup or work interval. After each step,
 inspect status:
 
@@ -70,6 +77,22 @@ For substantial coding work:
 5. Run tests.
 6. Remember or consolidate reusable lessons.
 7. Leave the run status and next action clear for the next wakeup.
+
+## Goal Loop Model
+
+Use this mental model:
+
+- Goal Loop: persistent orchestrator and checkpoint owner.
+- Planner: creates objectives, dependencies, and retrieval hints.
+- Recall: retrieves relevant memory before execution.
+- Context Assembler: writes the per-round prompt file.
+- Executor: runs the current step and returns a focused observation.
+- Review: reflects on confidence, gaps, and next action.
+- Verifier: deterministic correctness/completeness/integrity gate.
+- Archive: stores observations, reflections, verifier output, and reusable lessons.
+
+When verifier output fails, pause and repair the plan, context, or executor
+before continuing.
 
 ## Memory
 

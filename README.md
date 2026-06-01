@@ -13,6 +13,8 @@ progress, and emit a final research brief.
 - Planning with explicit research steps and success criteria.
 - Dependency-aware plans that can be linear, tree-like, or graph-like.
 - Checkpointed long-running research runs that can be resumed one step at a time.
+- Deterministic prompt assembly with fixed cached layers and per-round variable layers.
+- Deterministic verification for correctness, completeness, and integrity.
 - Reflection after each step to identify gaps and next actions.
 - A provider interface for plugging in real LLM/search/coding-agent backends.
 - A CLI that works out of the box with deterministic local providers.
@@ -132,6 +134,17 @@ Runs also keep an event log. Events record starts, completions, reflections,
 budget stops, retries, waits, and failures. This makes the run auditable and
 gives future memory consolidation better raw material.
 
+Each checkpointed step also assembles a model-view prompt file. The prompt uses
+stable fixed layers first, then variable per-round layers:
+
+- Fixed: role profile, task specification, output format.
+- Variable: reference injection, plan, memory recall, state context.
+
+For `runs step`, prompt files are written under
+`.auto_research/runs/prompts/<run-id>/` by default. This keeps full prompt
+content out of the orchestrator's immediate context while preserving an auditable
+artifact for subagents or external executors.
+
 Current limitations:
 
 - Checkpoints are local JSON files, not a distributed job queue.
@@ -153,6 +166,21 @@ A coding agent can treat this repo as a small workbench:
 5. Normal coding tools implement the selected change.
 6. Tests validate it.
 7. `memory consolidate` turns reusable lessons into durable memory.
+
+## Goal Loop
+
+The pipeline follows a persistent orchestrator loop:
+
+1. Planner creates direction, objectives, dependencies, and retrieval hints.
+2. Recall retrieves scoped memory with classical ranking.
+3. Context assembler writes a deterministic prompt artifact.
+4. Executor runs the step and returns a focused observation.
+5. Review records reflection and gaps.
+6. Verifier deterministically checks correctness, completeness, and integrity.
+7. Archive stores observations, reflections, verification records, and reusable feedback.
+
+If verification fails, the run moves to `waiting` so the agent can inspect the
+brief, adjust the plan or executor, and resume.
 
 ## Memory Design
 
