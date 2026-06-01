@@ -1,0 +1,20 @@
+seed: 7
+data:
+  train_path: "reproductions/ts_dfm_2511_17229/data/synthetic.jsonl"
+  eval_path: "reproductions/ts_dfm_2511_17229/data/synthetic.jsonl"
+model:
+  atom_dim: 64
+  pair_dim: 64
+  layers: 3
+  rbf_dim: 32
+  cutoff: 20.0
+training:
+  epochs: 3
+  batch_size: 4
+  lr: 0.0005
+  sigma: 0.1
+  checkpoint: "reproductions/ts_dfm_2511_17229/checkpoints/smoke.pt"
+inference:
+  steps: 20
+outputs:
+  metrics_path: "reproductions/ts_dfm_2511_17229/outputs/smoke_metrics.json"

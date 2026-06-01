@@ -167,6 +167,24 @@ A coding agent can treat this repo as a small workbench:
 6. Tests validate it.
 7. `memory consolidate` turns reusable lessons into durable memory.
 
+## Reproductions
+
+This repo can also host paper reproduction work created through the
+auto-research loop.
+
+- `reproductions/ts_dfm_2511_17229`: scaffold for arXiv:2511.17229,
+  "Generating transition states of chemical reactions via
+  distance-geometry-based flow matching".
+
+Run its synthetic smoke path with:
+
+```bash
+pip install -e ".[ts-dfm,dev]"
+reproduce-tsdfm make-synthetic --output reproductions/ts_dfm_2511_17229/data/synthetic.jsonl
+reproduce-tsdfm train --config reproductions/ts_dfm_2511_17229/configs/smoke.yaml
+reproduce-tsdfm eval --config reproductions/ts_dfm_2511_17229/configs/smoke.yaml
+```
+
 ## Goal Loop
 
 The pipeline follows a persistent orchestrator loop:

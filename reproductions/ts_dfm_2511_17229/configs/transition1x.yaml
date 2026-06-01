@@ -1,0 +1,22 @@
+seed: 7
+data:
+  train_path: "reproductions/ts_dfm_2511_17229/data/transition1x_train.jsonl"
+  eval_path: "reproductions/ts_dfm_2511_17229/data/transition1x_test.jsonl"
+model:
+  atom_dim: 128
+  pair_dim: 128
+  layers: 6
+  rbf_dim: 64
+  cutoff: 20.0
+training:
+  epochs: 500
+  batch_size: 32
+  lr: 0.0005
+  sigma: 0.1
+  lr_decay: 0.8
+  patience: 40
+  checkpoint: "reproductions/ts_dfm_2511_17229/checkpoints/transition1x.pt"
+inference:
+  steps: 100
+outputs:
+  metrics_path: "reproductions/ts_dfm_2511_17229/outputs/transition1x_metrics.json"

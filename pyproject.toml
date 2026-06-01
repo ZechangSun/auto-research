@@ -14,13 +14,21 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+ts-dfm = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "torch>=2.2",
+    "tqdm>=4.66",
+    "pyyaml>=6.0",
+]
 
 [project.scripts]
 auto-research = "auto_research.cli:main"
+reproduce-tsdfm = "reproductions.ts_dfm_2511_17229.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["auto_research*", "reproductions*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
