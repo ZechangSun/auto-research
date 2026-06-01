@@ -60,3 +60,25 @@ def test_convert_transition1x_reads_official_hdf5_shape(tmp_path):
     rows = load_jsonl(output)
     assert count == 1
     assert rows[0]["z"] == [6, 6, 1, 1]
+
+
+def test_early_experiment_svg_renderer(tmp_path):
+    from reproductions.ts_dfm_2511_17229.experiments import render_svg
+
+    summary = {
+        "results": [
+            {
+                "seed": 1,
+                "mean_rmsd": 0.4,
+                "mean_dmae": 0.05,
+                "history": [{"epoch": 1, "loss": 0.2}, {"epoch": 2, "loss": 0.1}],
+            }
+        ],
+        "mean_rmsd": 0.4,
+        "mean_dmae": 0.05,
+    }
+
+    output = render_svg(summary, tmp_path / "plot.svg")
+
+    assert output.exists()
+    assert "TS-DFM Early Synthetic Experiments" in output.read_text(encoding="utf-8")

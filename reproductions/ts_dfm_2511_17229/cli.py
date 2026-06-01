@@ -11,6 +11,7 @@ from reproductions.ts_dfm_2511_17229.data import (
     make_synthetic_rows,
     write_jsonl,
 )
+from reproductions.ts_dfm_2511_17229.experiments import run_early_experiments
 from reproductions.ts_dfm_2511_17229.flow import evaluate, train
 
 
@@ -47,6 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     eval_cmd = commands.add_parser("eval", help="Evaluate a trained checkpoint.")
     eval_cmd.add_argument("--config", required=True)
+
+    early = commands.add_parser("early-experiments", help="Run tiny synthetic experiments and generate plots.")
+    early.add_argument("--output-dir", default="reproductions/ts_dfm_2511_17229/outputs/early")
+    early.add_argument("--seeds", default="3,7,11", help="Comma-separated integer seeds.")
     return parser
 
 
@@ -72,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "eval":
             metrics = evaluate(load_yaml(args.config))
             print(json.dumps(metrics, indent=2))
+            return 0
+        if args.command == "early-experiments":
+            seeds = [int(seed.strip()) for seed in args.seeds.split(",") if seed.strip()]
+            summary = run_early_experiments(args.output_dir, seeds=seeds)
+            print(json.dumps({key: value for key, value in summary.items() if key != "results"}, indent=2))
+            print(f"Wrote {args.output_dir}/early_experiments.svg")
             return 0
     except RuntimeError as exc:
         print(f"error: {exc}")

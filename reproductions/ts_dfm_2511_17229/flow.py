@@ -21,6 +21,9 @@ def distance_triplet(row: dict[str, Any]) -> tuple[Any, Any, Any]:
 def train(config: dict[str, Any]) -> None:
     np = require_numpy()
     torch = require_torch()
+    seed = int(config.get("seed", 7))
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     rows = load_jsonl(config["data"]["train_path"])
     model = build_tsdvnet(**config["model"])
     optimizer = torch.optim.Adam(model.parameters(), lr=float(config["training"]["lr"]))
@@ -29,7 +32,9 @@ def train(config: dict[str, Any]) -> None:
     checkpoint = Path(config["training"]["checkpoint"])
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
 
-    for _ in range(epochs):
+    history: list[dict[str, float]] = []
+    for epoch in range(epochs):
+        losses = []
         for row in rows:
             d_r, d_p, d_ts = distance_triplet(row)
             d0 = (d_r + d_p) / 2.0
@@ -48,7 +53,13 @@ def train(config: dict[str, Any]) -> None:
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            losses.append(float(loss.detach().cpu().item()))
+        history.append({"epoch": float(epoch + 1), "loss": float(np.mean(losses))})
     torch.save({"model": model.state_dict(), "config": config}, checkpoint)
+    history_path = config.get("outputs", {}).get("history_path")
+    if history_path:
+        Path(history_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(history_path).write_text(json.dumps(history, indent=2), encoding="utf-8")
 
 
 def predict_distances(model: Any, row: dict[str, Any], steps: int = 100) -> Any:
@@ -73,6 +84,9 @@ def predict_distances(model: Any, row: dict[str, Any], steps: int = 100) -> Any:
 def evaluate(config: dict[str, Any]) -> dict[str, float]:
     np = require_numpy()
     torch = require_torch()
+    seed = int(config.get("seed", 7))
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     rows = load_jsonl(config["data"]["eval_path"])
     checkpoint = torch.load(config["training"]["checkpoint"], map_location="cpu")
     model = build_tsdvnet(**config["model"])

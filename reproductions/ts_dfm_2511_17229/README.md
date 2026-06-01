@@ -52,6 +52,23 @@ Verified locally on 2026-06-01 with Python 3.14:
 - `reproduce-tsdfm eval --config .../smoke.yaml`
 - `pytest`
 
+## Early Experiment Plots
+
+Run a small synthetic experiment matrix and generate SVG plots:
+
+```bash
+reproduce-tsdfm early-experiments \
+  --output-dir reproductions/ts_dfm_2511_17229/outputs/early \
+  --seeds 3,7,11
+```
+
+Outputs:
+
+- `early_experiments_summary.json`
+- `early_experiments.svg`
+
+The current checked-in early plot is `figures/early_experiments.svg`.
+
 ## Data Download And Conversion
 
 Transition1X is a large HDF5 dataset. The DOI resolves to Figshare, but some

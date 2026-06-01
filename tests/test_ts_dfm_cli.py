@@ -22,3 +22,13 @@ def test_tsdfm_cli_reports_download_errors(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 2
     assert "blocked" in capsys.readouterr().out
+
+
+def test_tsdfm_cli_early_experiments(tmp_path):
+    output_dir = tmp_path / "early"
+
+    exit_code = main(["early-experiments", "--output-dir", str(output_dir), "--seeds", "1"])
+
+    assert exit_code == 0
+    assert (output_dir / "early_experiments_summary.json").exists()
+    assert (output_dir / "early_experiments.svg").exists()
