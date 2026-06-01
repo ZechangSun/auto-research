@@ -315,9 +315,12 @@ def test_cli_compare_reports_regression_against_git_base(tmp_path, capsys):
             "HEAD",
             "--command",
             f"{sys.executable} check.py",
+            "--ledger",
+            str(tmp_path / "comparisons.jsonl"),
         ]
     )
 
     output = capsys.readouterr().out
     assert exit_code == 1
     assert "regression" in output
+    assert '"status": "regression"' in (tmp_path / "comparisons.jsonl").read_text(encoding="utf-8")

@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -158,6 +159,27 @@ def run_git_comparison(
         finally:
             _remove_worktree(repo_path, base_path)
     return compare_command_results(baseline, current)
+
+
+def append_comparison_ledger(
+    path: str | Path,
+    comparison: ChangeComparison,
+    base: str,
+    head: str,
+) -> Path:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "base": base,
+        "head": head,
+        "status": comparison.status,
+        "recommendation": comparison.recommendation,
+        "commands": [asdict(command) for command in comparison.commands],
+    }
+    with target.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    return target
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:

@@ -6,7 +6,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from auto_research.change_eval import run_git_comparison
+from auto_research.change_eval import append_comparison_ledger, run_git_comparison
 from auto_research.consolidation import consolidate_memory
 from auto_research.human import HumanDecision, HumanReviewKind
 from auto_research.improvement import improve_repository
@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--repo", default=".", help="Git repository to evaluate.")
     compare.add_argument("--base", default="HEAD~1", help="Baseline git ref.")
     compare.add_argument("--head", default="working-tree", help="Current ref, or working-tree.")
+    compare.add_argument(
+        "--ledger",
+        default=None,
+        help="Optional JSONL ledger path for comparison history.",
+    )
     compare.add_argument(
         "--command",
         dest="validation_command",
@@ -196,6 +201,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"error: compare failed: {exc}")
             return 2
+        if args.ledger:
+            ledger_path = append_comparison_ledger(args.ledger, comparison, args.base, args.head)
+            if not args.json:
+                print(f"Ledger: {ledger_path}")
         print(comparison.to_json() if args.json else comparison.to_markdown())
         return 1 if comparison.status == "regression" else 0
 

@@ -107,14 +107,18 @@ For substantial coding work:
 After making changes, compare the same validation command against the baseline:
 
 ```bash
-auto-research compare --base HEAD~1 --command "python -m pytest"
+auto-research compare \
+  --base HEAD~1 \
+  --command "python -m pytest" \
+  --ledger .auto_research/comparisons.jsonl
 ```
 
 Use `--head working-tree` for uncommitted changes, or pass a git ref. If status is
 `regression`, fix the regression before continuing. If status is `still_failing`,
 do not stop as complete; use the shared failure output to plan the next
 adjustment. If status is `improved` or `stable`, broaden validation before
-archiving the result.
+archiving the result. Use the ledger for trend analysis across long-running
+optimization sessions.
 
 ## No-API Agent Bridge
 

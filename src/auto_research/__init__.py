@@ -1,6 +1,12 @@
 """Auto-research pipeline primitives for coding agents."""
 
-from auto_research.change_eval import ChangeComparison, CommandComparison, CommandResult, compare_command_results
+from auto_research.change_eval import (
+    ChangeComparison,
+    CommandComparison,
+    CommandResult,
+    append_comparison_ledger,
+    compare_command_results,
+)
 from auto_research.context import AssembledContext, OutputFormat, PromptAssembler, RoleProfile, TaskSpecification
 from auto_research.human import HumanDecision, HumanReview, HumanReviewKind, HumanReviewStatus
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope, ShortTermMemory
@@ -46,5 +52,6 @@ __all__ = [
     "VerificationReport",
     "lint_plan",
     "render_run_brief",
+    "append_comparison_ledger",
     "compare_command_results",
 ]

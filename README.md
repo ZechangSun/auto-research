@@ -75,13 +75,18 @@ previous version before deciding whether to keep tuning or stop:
 auto-research compare \
   --base HEAD~1 \
   --head working-tree \
-  --command "python -m pytest"
+  --command "python -m pytest" \
+  --ledger .auto_research/comparisons.jsonl
 ```
 
 The command creates a temporary git worktree for the baseline ref, runs the same
 validation commands in both versions, and reports `improved`, `regression`,
 `stable`, `mixed`, or `still_failing`. A regression exits with code `1`, so it
-can be used as a guardrail in scripts or agent loops.
+can be used as a guardrail in scripts or agent loops. Use `--ledger` to append
+JSONL comparison history for later trend analysis and memory consolidation.
+
+See `docs/research/auto_research_landscape.md` for notes from related
+auto-research and agent-memory repositories that informed this loop.
 
 ## Coding-Agent Skill
 
