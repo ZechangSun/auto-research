@@ -78,6 +78,19 @@ auto-research run "Research how to implement the current coding task"
 The skill keeps local long-term memory under `.auto_research/memory.sqlite`,
 which is intentionally ignored by git.
 
+To make future Codex sessions naturally discover the skill, install it into the
+user-level skills directory:
+
+```bash
+rm -rf ~/.codex/skills/auto-research
+mkdir -p ~/.codex/skills
+cp -R skills/auto-research ~/.codex/skills/auto-research
+```
+
+If the CLI is not on `PATH`, either activate this repo's virtualenv or create a
+small shim to `.venv/bin/auto-research`. New Codex sessions will pick up the
+skill metadata after the skill is installed.
+
 For deeper agent guidance, see
 `skills/auto-research/references/memory_planning.md`.
 
