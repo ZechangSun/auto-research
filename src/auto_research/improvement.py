@@ -101,6 +101,8 @@ def _render_improvement_brief(snapshot: RepoSnapshot, report: ResearchReport) ->
             "## Agent Usage",
             "- Run this command before substantial repo work: `auto-research improve --repo .`.",
             "- Read this brief, choose the smallest useful change, implement it, then run tests.",
+            "- Compare against the prior version before deciding whether to keep tuning: "
+            "`auto-research compare --base HEAD~1 --command \"python -m pytest\"`.",
             "- Run the command again after changes to preserve long-term improvement memory.",
         ]
     )

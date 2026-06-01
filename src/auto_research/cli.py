@@ -6,6 +6,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from auto_research.change_eval import run_git_comparison
 from auto_research.consolidation import consolidate_memory
 from auto_research.human import HumanDecision, HumanReviewKind
 from auto_research.improvement import improve_repository
@@ -26,6 +27,20 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--session-id", default=None, help="Optional stable session id.")
     run.add_argument("--prompt-dir", default=None, help="Optional directory for assembled prompt files.")
     run.add_argument("--json", action="store_true", help="Print a structured JSON report.")
+
+    compare = subcommands.add_parser("compare", help="Compare validation commands across versions.")
+    compare.add_argument("--repo", default=".", help="Git repository to evaluate.")
+    compare.add_argument("--base", default="HEAD~1", help="Baseline git ref.")
+    compare.add_argument("--head", default="working-tree", help="Current ref, or working-tree.")
+    compare.add_argument(
+        "--command",
+        dest="validation_command",
+        action="append",
+        required=True,
+        help="Command to run in both versions.",
+    )
+    compare.add_argument("--timeout", type=int, default=120, help="Per-command timeout in seconds.")
+    compare.add_argument("--json", action="store_true", help="Print structured JSON.")
 
     improve = subcommands.add_parser("improve", help="Research improvements for a repository.")
     improve.add_argument("--repo", default=".", help="Repository path to inspect.")
@@ -150,7 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in {"run", "improve", "memory", "runs", "agent", "human", "-h", "--help"}:
+    if argv and argv[0] not in {"run", "compare", "improve", "memory", "runs", "agent", "human", "-h", "--help"}:
         argv.insert(0, "run")
 
     args = build_parser().parse_args(argv)
@@ -168,6 +183,21 @@ def main(argv: list[str] | None = None) -> int:
             print(result.report.to_markdown())
             print(f"\nImprovement brief written to {result.output_path}")
         return 0
+
+    if args.command == "compare":
+        try:
+            comparison = run_git_comparison(
+                repo=Path(args.repo),
+                commands=list(args.validation_command),
+                base=args.base,
+                head=args.head,
+                timeout=args.timeout,
+            )
+        except Exception as exc:
+            print(f"error: compare failed: {exc}")
+            return 2
+        print(comparison.to_json() if args.json else comparison.to_markdown())
+        return 1 if comparison.status == "regression" else 0
 
     if args.command == "memory":
         return _memory_command(args)

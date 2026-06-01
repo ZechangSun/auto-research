@@ -3,6 +3,7 @@ from auto_research.pipeline import ResearchPipeline
 from auto_research.planning import Plan, PlanEdge, PlanShape, PlanStep, StepStatus, lint_plan
 from auto_research.consolidation import consolidate_memory
 from auto_research.context import PromptAssembler
+from auto_research.change_eval import CommandResult, compare_command_results
 from auto_research.human import HumanDecision, HumanReviewKind
 from auto_research.run_state import RunStatus, RunStore
 from auto_research.verifier import DeterministicVerifier
@@ -250,3 +251,13 @@ def test_deterministic_verifier_rejects_empty_observation(tmp_path):
         memory.close()
 
     assert not report.passed
+
+
+def test_change_comparison_detects_regression():
+    baseline = [CommandResult("tests", "pytest", ".", 0, "passed", "", 0.1)]
+    current = [CommandResult("tests", "pytest", ".", 1, "failed", "assertion", 0.1)]
+
+    comparison = compare_command_results(baseline, current)
+
+    assert comparison.status == "regression"
+    assert "fix the regression" in comparison.recommendation.lower()

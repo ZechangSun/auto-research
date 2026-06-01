@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 from auto_research.cli import main
 
 
@@ -290,3 +293,31 @@ def test_cli_human_request_status_and_respond(tmp_path, capsys):
     assert respond_code == 0
     assert "needs_human" in output
     assert "Use a smaller baseline first." in output
+
+
+def test_cli_compare_reports_regression_against_git_base(tmp_path, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "check.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "check.py"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "baseline"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    (repo / "check.py").write_text("raise SystemExit(1)\n", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "compare",
+            "--repo",
+            str(repo),
+            "--base",
+            "HEAD",
+            "--command",
+            f"{sys.executable} check.py",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "regression" in output

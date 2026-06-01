@@ -20,9 +20,10 @@ designing complex agent behavior.
 2. Read the generated report or `.auto_research/improvement_brief.md`.
 3. Convert the highest-value recommendation into a small implementation plan.
 4. Implement the change with normal coding-agent tools.
-5. Run relevant tests.
-6. Consolidate reusable lessons: `auto-research memory consolidate`.
-7. Run the pipeline again when the task is substantial or the results changed the direction.
+5. Compare the changed version with the previous baseline.
+6. Run relevant tests.
+7. Consolidate reusable lessons: `auto-research memory consolidate`.
+8. Run the pipeline again when the task is substantial or the results changed the direction.
 
 ## Long-Running Work
 
@@ -45,7 +46,7 @@ Each step assembles a deterministic model-view prompt file. Treat that file as
 the subagent/bootstrap input:
 
 - Fixed layers: role profile, task specification, output format.
-- Variable layers: reference injection, plan, memory recall, state context.
+- Variable layers: reference injection, plan, memory recall, human context, state context.
 - Default location: `.auto_research/runs/prompts/<run-id>/`.
 
 Run one or more checkpointed steps per wakeup or work interval. After each step,
@@ -96,9 +97,24 @@ For substantial coding work:
 2. Read `runs brief`.
 3. Execute a small number of steps.
 4. Implement the next concrete change with normal coding tools.
-5. Run tests.
-6. Remember or consolidate reusable lessons.
-7. Leave the run status and next action clear for the next wakeup.
+5. Run `compare` against the previous version.
+6. Run tests.
+7. Remember or consolidate reusable lessons.
+8. Leave the run status and next action clear for the next wakeup.
+
+## Change Comparison
+
+After making changes, compare the same validation command against the baseline:
+
+```bash
+auto-research compare --base HEAD~1 --command "python -m pytest"
+```
+
+Use `--head working-tree` for uncommitted changes, or pass a git ref. If status is
+`regression`, fix the regression before continuing. If status is `still_failing`,
+do not stop as complete; use the shared failure output to plan the next
+adjustment. If status is `improved` or `stable`, broaden validation before
+archiving the result.
 
 ## No-API Agent Bridge
 

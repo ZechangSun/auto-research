@@ -52,6 +52,7 @@ auto-research improve --repo .
 auto-research memory remember "Prefer BM25 retrieval before embeddings" --scope procedural --tag retrieval
 auto-research memory search "BM25 retrieval" --scope procedural
 auto-research memory consolidate
+auto-research compare --base HEAD~1 --command "python -m pytest"
 auto-research runs start "Research a large implementation" --max-steps 12
 auto-research runs step <run-id> --steps 3
 auto-research runs status <run-id>
@@ -64,6 +65,23 @@ auto-research human respond <run-id> --decision approve --content "Approved; kee
 snapshot with the pipeline's plan, observations, and reflection. This gives a
 coding agent a repeatable way to decide the next small improvement, implement it,
 test it, and run the loop again.
+
+## Change Comparison Loop
+
+After a coding agent changes the repository, compare the new state with the
+previous version before deciding whether to keep tuning or stop:
+
+```bash
+auto-research compare \
+  --base HEAD~1 \
+  --head working-tree \
+  --command "python -m pytest"
+```
+
+The command creates a temporary git worktree for the baseline ref, runs the same
+validation commands in both versions, and reports `improved`, `regression`,
+`stable`, `mixed`, or `still_failing`. A regression exits with code `1`, so it
+can be used as a guardrail in scripts or agent loops.
 
 ## Coding-Agent Skill
 
