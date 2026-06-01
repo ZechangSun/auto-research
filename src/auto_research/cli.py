@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from auto_research.consolidation import consolidate_memory
+from auto_research.human import HumanDecision, HumanReviewKind
 from auto_research.improvement import improve_repository
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope
 from auto_research.pipeline import ResearchPipeline
@@ -118,12 +119,38 @@ def build_parser() -> argparse.ArgumentParser:
     agent_complete.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
     agent_complete.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
     agent_complete.add_argument("--json", action="store_true")
+
+    human = subcommands.add_parser("human", help="Manage human-in-the-loop checkpoints.")
+    human_subcommands = human.add_subparsers(dest="human_command", required=True)
+
+    human_request = human_subcommands.add_parser("request", help="Pause a run for human review.")
+    human_request.add_argument("run_id", help="Run id to pause.")
+    human_request.add_argument("--kind", choices=[kind.value for kind in HumanReviewKind], default="approval")
+    human_request.add_argument("--prompt", required=True)
+    human_request.add_argument("--step-id", default=None)
+    human_request.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    human_request.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    human_request.add_argument("--json", action="store_true")
+
+    human_status = human_subcommands.add_parser("status", help="Show human review status for a run.")
+    human_status.add_argument("run_id", help="Run id to inspect.")
+    human_status.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    human_status.add_argument("--json", action="store_true")
+
+    human_respond = human_subcommands.add_parser("respond", help="Resolve an open human review.")
+    human_respond.add_argument("run_id", help="Run id to update.")
+    human_respond.add_argument("--review-id", default=None)
+    human_respond.add_argument("--decision", choices=[decision.value for decision in HumanDecision], required=True)
+    human_respond.add_argument("--content", required=True)
+    human_respond.add_argument("--db", default=".auto_research/memory.sqlite", help="SQLite memory path.")
+    human_respond.add_argument("--state-dir", default=".auto_research/runs", help="Run checkpoint directory.")
+    human_respond.add_argument("--json", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in {"run", "improve", "memory", "runs", "agent", "-h", "--help"}:
+    if argv and argv[0] not in {"run", "improve", "memory", "runs", "agent", "human", "-h", "--help"}:
         argv.insert(0, "run")
 
     args = build_parser().parse_args(argv)
@@ -151,6 +178,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "agent":
         return _agent_command(args)
 
+    if args.command == "human":
+        return _human_command(args)
+
     memory = LongTermMemory(Path(args.db))
     try:
         report = ResearchPipeline(memory, prompt_dir=args.prompt_dir).run(
@@ -165,6 +195,73 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         memory.close()
     return 0
+
+
+def _human_command(args: argparse.Namespace) -> int:
+    store = RunStore(args.state_dir)
+    if args.human_command == "request":
+        state = store.load(args.run_id)
+        memory = LongTermMemory(Path(args.db))
+        try:
+            pipeline = ResearchPipeline(memory)
+            state = pipeline.request_human_review(
+                state,
+                prompt=args.prompt,
+                kind=HumanReviewKind(args.kind),
+                step_id=args.step_id,
+            )
+            store.save(state)
+            payload = state.to_dict()
+            if args.json:
+                print(json.dumps(payload, indent=2, default=str))
+            else:
+                review = state.open_human_review()
+                print(f"Run {state.run_id} status={state.status.value}")
+                if review:
+                    print(f"Review: {review.id} kind={review.kind.value}")
+                    print(f"Prompt: {review.prompt}")
+                print(f"Next: {state.next_action()}")
+        finally:
+            memory.close()
+        return 0
+
+    if args.human_command == "status":
+        state = store.load(args.run_id)
+        if args.json:
+            print(json.dumps(state.to_dict(), indent=2, default=str))
+        else:
+            print(f"Run {state.run_id} status={state.status.value}")
+            if not state.human_reviews:
+                print("No human reviews.")
+            for review in state.human_reviews:
+                print(f"- {review.id} [{review.status.value}/{review.kind.value}] {review.prompt}")
+                if review.decision and review.content:
+                    print(f"  {review.decision.value}: {review.content}")
+            print(f"Next: {state.next_action()}")
+        return 0
+
+    if args.human_command == "respond":
+        state = store.load(args.run_id)
+        memory = LongTermMemory(Path(args.db))
+        try:
+            pipeline = ResearchPipeline(memory)
+            state = pipeline.respond_to_human_review(
+                state,
+                decision=HumanDecision(args.decision),
+                content=args.content,
+                review_id=args.review_id,
+            )
+            store.save(state)
+            if args.json:
+                print(json.dumps(state.to_dict(), indent=2, default=str))
+            else:
+                print(f"Run {state.run_id} status={state.status.value}")
+                print(args.content)
+                print(f"Next: {state.next_action()}")
+        finally:
+            memory.close()
+        return 0
+    return 1
 
 
 def _agent_command(args: argparse.Namespace) -> int:

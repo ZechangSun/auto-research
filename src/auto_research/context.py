@@ -80,6 +80,7 @@ class PromptAssembler:
             self._render_reference_injection(step, recalled_memories),
             self._render_plan(state, step),
             self._render_memory_recall(recalled_memories),
+            self._render_human_context(state),
             self._render_state_context(state),
         )
         content = "\n\n".join((*fixed_layers, "---", *variable_layers))
@@ -88,7 +89,7 @@ class PromptAssembler:
             content=content,
             cache_key=cache_key,
             fixed_layers=("role_profile", "task_specification", "output_format"),
-            variable_layers=("reference_injection", "plan", "memory_recall", "state_context"),
+            variable_layers=("reference_injection", "plan", "memory_recall", "human_context", "state_context"),
         )
 
     def _render_role_profile(self) -> str:
@@ -169,6 +170,17 @@ class PromptAssembler:
                 ],
             ]
         )
+
+    @staticmethod
+    def _render_human_context(state: ResearchRunState) -> str:
+        if not state.human_reviews:
+            return "# Human Context\n- None"
+        lines = ["# Human Context"]
+        for review in state.human_reviews[-5:]:
+            lines.append(f"- [{review.status.value}] {review.kind.value}: {review.prompt}")
+            if review.decision and review.content:
+                lines.append(f"  response={review.decision.value}: {review.content}")
+        return "\n".join(lines)
 
     @staticmethod
     def _render_state_context(state: ResearchRunState) -> str:

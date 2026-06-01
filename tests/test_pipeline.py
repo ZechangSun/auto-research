@@ -3,6 +3,7 @@ from auto_research.pipeline import ResearchPipeline
 from auto_research.planning import Plan, PlanEdge, PlanShape, PlanStep, StepStatus, lint_plan
 from auto_research.consolidation import consolidate_memory
 from auto_research.context import PromptAssembler
+from auto_research.human import HumanDecision, HumanReviewKind
 from auto_research.run_state import RunStatus, RunStore
 from auto_research.verifier import DeterministicVerifier
 from auto_research.workbench import render_run_brief
@@ -206,6 +207,35 @@ def test_pipeline_supports_external_agent_completion(tmp_path):
     assert state.steps_executed == 1
     assert any(event.type == "verification_passed" for event in state.events)
     assert list(prompt_dir.glob(f"{state.run_id}/*.md"))
+
+
+def test_pipeline_supports_human_review_pause_and_resume(tmp_path):
+    memory = LongTermMemory(tmp_path / "memory.sqlite")
+    try:
+        pipeline = ResearchPipeline(memory)
+        state = pipeline.start("Require a human decision before continuing", max_steps=2)
+        state = pipeline.request_human_review(
+            state,
+            kind=HumanReviewKind.APPROVAL,
+            prompt="Approve the next experiment budget?",
+            step_id="scope",
+        )
+
+        paused = pipeline.step(state)
+        assert paused.status is RunStatus.NEEDS_HUMAN
+        state = pipeline.respond_to_human_review(
+            paused,
+            decision=HumanDecision.APPROVE,
+            content="Approved a small synthetic run first.",
+        )
+        state.status = RunStatus.ACTIVE
+        prompt = pipeline.prepare_agent_step(state)
+    finally:
+        memory.close()
+
+    assert state.human_reviews[-1].decision is HumanDecision.APPROVE
+    assert prompt is not None
+    assert "Approved a small synthetic run first." in prompt.content
 
 
 def test_deterministic_verifier_rejects_empty_observation(tmp_path):

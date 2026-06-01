@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from auto_research.context import PromptAssembler
+from auto_research.human import HumanDecision, HumanReview, HumanReviewKind, HumanReviewStatus
 from auto_research.memory import LongTermMemory, MemoryRecord, MemoryQuery, MemoryScope, ShortTermMemory
 from auto_research.planning import Plan, PlanStep, StepStatus, lint_plan
 from auto_research.providers import (
@@ -127,6 +128,8 @@ class ResearchPipeline:
         return state
 
     def step(self, state: ResearchRunState) -> ResearchRunState:
+        if state.status is RunStatus.NEEDS_HUMAN:
+            return state
         agent_prompt = self.prepare_agent_step(state)
         if agent_prompt is None:
             return state
@@ -196,6 +199,72 @@ class ResearchPipeline:
             prompt_path=prompt_path,
             content=assembled_context.content,
         )
+
+    def request_human_review(
+        self,
+        state: ResearchRunState,
+        prompt: str,
+        kind: HumanReviewKind = HumanReviewKind.APPROVAL,
+        step_id: str | None = None,
+    ) -> ResearchRunState:
+        review = HumanReview(prompt=prompt, kind=kind, step_id=step_id)
+        state.human_reviews.append(review)
+        state.status = RunStatus.NEEDS_HUMAN
+        state.add_event(
+            "human_review_requested",
+            prompt,
+            step_id=step_id,
+            metadata={"review_id": review.id, "kind": review.kind.value},
+        )
+        return state
+
+    def respond_to_human_review(
+        self,
+        state: ResearchRunState,
+        decision: HumanDecision,
+        content: str,
+        review_id: str | None = None,
+    ) -> ResearchRunState:
+        review = self._human_review_by_id(state, review_id) if review_id else state.open_human_review()
+        if review is None:
+            state.status = RunStatus.FAILED
+            state.last_error = "No open human review to respond to."
+            state.add_event("failed", state.last_error)
+            return state
+
+        review.respond(decision, content)
+        record = MemoryRecord(
+            kind=f"human_{decision.value}",
+            content=content,
+            scope=MemoryScope.REFLECTIVE if decision is HumanDecision.REJECT else MemoryScope.EPISODIC,
+            importance=0.9 if decision in {HumanDecision.REJECT, HumanDecision.REVISE} else 0.75,
+            confidence=1.0,
+            tags=("human", decision.value, review.kind.value),
+            metadata={
+                "task": state.task,
+                "review_id": review.id,
+                "step_id": review.step_id,
+                "session_id": state.session_id,
+            },
+        )
+        self.short_term_memory.add(record)
+        self.long_term_memory.add(record)
+        state.add_event(
+            "human_review_resolved",
+            content,
+            step_id=review.step_id,
+            metadata={
+                "review_id": review.id,
+                "kind": review.kind.value,
+                "decision": decision.value,
+            },
+        )
+        if decision is HumanDecision.REJECT:
+            state.status = RunStatus.WAITING
+            state.add_event("waiting", "Human rejected the checkpoint; waiting for replanning.", step_id=review.step_id)
+        else:
+            state.status = RunStatus.ACTIVE
+        return state
 
     def complete_agent_step(self, state: ResearchRunState, step_id: str, observation: str) -> ResearchRunState:
         step = self._step_by_id(state, step_id)
@@ -282,6 +351,13 @@ class ResearchPipeline:
         for step in state.plan.steps:
             if step.id == step_id:
                 return step
+        return None
+
+    @staticmethod
+    def _human_review_by_id(state: ResearchRunState, review_id: str | None) -> HumanReview | None:
+        for review in state.human_reviews:
+            if review.id == review_id and review.status is HumanReviewStatus.OPEN:
+                return review
         return None
 
     def _write_prompt_artifact(

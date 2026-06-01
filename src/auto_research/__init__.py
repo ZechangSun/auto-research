@@ -1,6 +1,7 @@
 """Auto-research pipeline primitives for coding agents."""
 
 from auto_research.context import AssembledContext, OutputFormat, PromptAssembler, RoleProfile, TaskSpecification
+from auto_research.human import HumanDecision, HumanReview, HumanReviewKind, HumanReviewStatus
 from auto_research.memory import LongTermMemory, MemoryQuery, MemoryRecord, MemoryScope, ShortTermMemory
 from auto_research.pipeline import AgentStepPrompt, ResearchPipeline, ResearchReport
 from auto_research.planning import Plan, PlanIssue, PlanShape, PlanStep, lint_plan
@@ -11,6 +12,10 @@ from auto_research.workbench import render_run_brief
 
 __all__ = [
     "LongTermMemory",
+    "HumanDecision",
+    "HumanReview",
+    "HumanReviewKind",
+    "HumanReviewStatus",
     "MemoryQuery",
     "MemoryRecord",
     "MemoryScope",

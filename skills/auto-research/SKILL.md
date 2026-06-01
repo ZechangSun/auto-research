@@ -53,6 +53,7 @@ inspect status:
 
 - `active`: continue stepping.
 - `waiting`: needs another wakeup, higher max step budget, or external input.
+- `needs_human`: request an approval, clarification, decision, or risk review response before continuing.
 - `complete`: produce final summary and consolidate memory.
 - `failed`: inspect `last_error`, fix the provider/tool issue, then resume.
 
@@ -63,8 +64,29 @@ Long-running limitations to remember:
 
 - Current checkpoints are local JSON files.
 - There is no built-in scheduler yet.
-- Human approvals and external tool waits are not first-class events yet.
+- External tool waits are not first-class events yet.
 - Budget, deadline, cancellation, and retry policies still need design.
+
+## Human-In-The-Loop
+
+Pause a run when human judgment should constrain the next step:
+
+```bash
+auto-research human request <run-id> \
+  --kind approval \
+  --prompt "Approve this plan before the agent spends more compute."
+auto-research human status <run-id>
+auto-research human respond <run-id> \
+  --decision approve \
+  --content "Approved, but keep the first experiment small."
+```
+
+Kinds: `approval`, `clarification`, `decision`, `risk_review`.
+Decisions: `approve`, `revise`, `reject`, `comment`.
+
+Human responses are stored in memory and injected into later prompt files through
+the human context layer. Use this before irreversible actions, expensive runs,
+ambiguous research choices, or places where the user owns the preference.
 
 ## Equipment Pattern
 

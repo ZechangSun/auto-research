@@ -7,6 +7,7 @@ from enum import Enum
 from pathlib import Path
 from uuid import uuid4
 
+from auto_research.human import HumanReview
 from auto_research.planning import Plan
 
 
@@ -17,6 +18,7 @@ def now_utc() -> str:
 class RunStatus(str, Enum):
     ACTIVE = "active"
     WAITING = "waiting"
+    NEEDS_HUMAN = "needs_human"
     COMPLETE = "complete"
     FAILED = "failed"
 
@@ -64,6 +66,7 @@ class ResearchRunState:
     updated_at: str = field(default_factory=now_utc)
     last_error: str | None = None
     events: list[RunEvent] = field(default_factory=list)
+    human_reviews: list[HumanReview] = field(default_factory=list)
 
     def add_event(
         self,
@@ -90,6 +93,11 @@ class ResearchRunState:
             if self.steps_executed >= self.max_steps:
                 return "Increase the step budget or review the partial report before continuing."
             return "Resolve the wait condition, then run another checkpointed step."
+        if self.status is RunStatus.NEEDS_HUMAN:
+            review = self.open_human_review()
+            if review:
+                return f"Respond to human review {review.id}: {review.prompt}"
+            return "Resolve the human checkpoint before continuing."
         ready = self.plan.ready_steps() or self.plan.pending_steps()
         if ready:
             return f"Run the next step: {ready[0].id}."
@@ -110,6 +118,7 @@ class ResearchRunState:
             "updated_at": self.updated_at,
             "last_error": self.last_error,
             "events": [event.to_dict() for event in self.events],
+            "human_reviews": [review.to_dict() for review in self.human_reviews],
         }
 
     @classmethod
@@ -128,7 +137,14 @@ class ResearchRunState:
             updated_at=str(data.get("updated_at", now_utc())),
             last_error=data.get("last_error") if data.get("last_error") else None,
             events=[RunEvent.from_dict(event) for event in data.get("events", [])],
+            human_reviews=[HumanReview.from_dict(review) for review in data.get("human_reviews", [])],
         )
+
+    def open_human_review(self) -> HumanReview | None:
+        for review in reversed(self.human_reviews):
+            if review.status.value == "open":
+                return review
+        return None
 
 
 class RunStore:

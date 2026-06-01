@@ -233,3 +233,60 @@ def test_cli_agent_next_and_complete(tmp_path, capsys):
     assert complete_code == 0
     assert "Auto-Research Run Brief" in output
     assert list(prompt_dir.glob(f"{run_id}/*.md"))
+
+
+def test_cli_human_request_status_and_respond(tmp_path, capsys):
+    db = tmp_path / "memory.sqlite"
+    state_dir = tmp_path / "runs"
+
+    main(
+        [
+            "runs",
+            "start",
+            "Use human checkpoints",
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+            "--max-steps",
+            "2",
+        ]
+    )
+    run_id = capsys.readouterr().out.split()[1]
+
+    request_code = main(
+        [
+            "human",
+            "request",
+            run_id,
+            "--kind",
+            "approval",
+            "--prompt",
+            "Approve the next step?",
+            "--state-dir",
+            str(state_dir),
+        ]
+    )
+    status_code = main(["human", "status", run_id, "--state-dir", str(state_dir)])
+    respond_code = main(
+        [
+            "human",
+            "respond",
+            run_id,
+            "--decision",
+            "revise",
+            "--content",
+            "Use a smaller baseline first.",
+            "--db",
+            str(db),
+            "--state-dir",
+            str(state_dir),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert request_code == 0
+    assert status_code == 0
+    assert respond_code == 0
+    assert "needs_human" in output
+    assert "Use a smaller baseline first." in output

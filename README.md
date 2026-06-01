@@ -13,6 +13,7 @@ progress, and emit a final research brief.
 - Planning with explicit research steps and success criteria.
 - Dependency-aware plans that can be linear, tree-like, or graph-like.
 - Checkpointed long-running research runs that can be resumed one step at a time.
+- Human-in-the-loop checkpoints for approvals, clarifications, decisions, and risk reviews.
 - Deterministic prompt assembly with fixed cached layers and per-round variable layers.
 - Deterministic verification for correctness, completeness, and integrity.
 - Reflection after each step to identify gaps and next actions.
@@ -55,6 +56,8 @@ auto-research runs start "Research a large implementation" --max-steps 12
 auto-research runs step <run-id> --steps 3
 auto-research runs status <run-id>
 auto-research runs brief <run-id>
+auto-research human request <run-id> --kind approval --prompt "Approve the next experiment?"
+auto-research human respond <run-id> --decision approve --content "Approved; keep the first run small."
 ```
 
 `improve` writes `.auto_research/improvement_brief.md`, combining a repository
@@ -138,20 +141,39 @@ Each checkpointed step also assembles a model-view prompt file. The prompt uses
 stable fixed layers first, then variable per-round layers:
 
 - Fixed: role profile, task specification, output format.
-- Variable: reference injection, plan, memory recall, state context.
+- Variable: reference injection, plan, memory recall, human context, state context.
 
 For `runs step`, prompt files are written under
 `.auto_research/runs/prompts/<run-id>/` by default. This keeps full prompt
 content out of the orchestrator's immediate context while preserving an auditable
 artifact for subagents or external executors.
 
+### Human-In-The-Loop Checkpoints
+
+Use `human request` when a run needs explicit human judgment before continuing:
+
+```bash
+auto-research human request <run-id> \
+  --kind risk_review \
+  --prompt "Review whether this benchmark is meaningful before spending more compute."
+auto-research human status <run-id>
+auto-research human respond <run-id> \
+  --decision revise \
+  --content "Use a smaller synthetic baseline first, then revisit the full dataset."
+```
+
+Open reviews move the run to `needs_human`. Responses are archived as memory and
+injected into later prompt files through the human context layer. `approve`,
+`revise`, and `comment` resume the run as `active`; `reject` leaves it waiting
+for replanning.
+
 Current limitations:
 
 - Checkpoints are local JSON files, not a distributed job queue.
 - There is no scheduler or heartbeat loop yet; another process must call
   `runs step`.
-- External waits, browser jobs, and human approvals are represented only as
-  waiting state, not first-class blocking events.
+- External waits and browser jobs are represented only as waiting state, not
+  first-class blocking events.
 - Budgets, deadlines, cancellation, and retry policies are not yet modeled.
 - Provider calls are synchronous; async providers will need a richer executor.
 
